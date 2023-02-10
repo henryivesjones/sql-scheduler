@@ -7,6 +7,7 @@ authors = [
 description = "sql-scheduler allows you to easily run a suite of SQL scripts against a Postgres/Redshift database."
 readme = "README.md"
 requires-python = ">=3.6"
+license = {text="GPL-3.0-or-later"}
 classifiers = [
   "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
   "Programming Language :: Python :: 3",
@@ -16,7 +17,7 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
 ]
-license = "GPL-3.0-or-later"
+
 dependencies = [
   "asyncpg"
 ]
