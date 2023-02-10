@@ -82,6 +82,22 @@ sql-scheduler -t schema.table --dev
 sql-scheduler --check
 ```
 
+# Non-CLI Usage
+You may want to utilize `sql-scheduler` from within a python script instead of from the command line, for instance if you wanted to run it from within an airflow task. To do this simply import the `sql_scheduler` function which can be used as the entrypoint.
+```python
+from sql_scheduler.sql_scheduler import sql_scheduler
+
+if __name__ == "__main__":
+    sql_scheduler(
+        stage="dev",
+        dev_schema="dev_schema",
+        targets=["prod_schema.table_a", "prod_schema.table_b"],
+        dependencies=False,
+        check=False,
+    )
+
+```
+
 # Tests
 You can add tests to insert scripts which will make certain assertions about the data. Currently there are three options for tests: `granularity`, `not_null`, and `relationship`. To specify a test in a script simply add the test into a comment contained within the `insert` script. A failure of a test will stop downstream tasks from running.
 
