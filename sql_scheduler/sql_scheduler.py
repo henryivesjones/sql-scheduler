@@ -237,6 +237,7 @@ async def execute(
         print("Circular dependencies found... exiting.")
         sys.exit(1)
     if check:
+        print("No circular dependencies found...")
         sys.exit()
     # EXECUTION LOOP
     futures = []
