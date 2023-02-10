@@ -1,0 +1,30 @@
+[project]
+name = "sql-scheduler"
+version = "0.1.1"
+authors = [
+  { name="Henry Jones", email="henryivesjones@gmail.com" },
+]
+description = "sql-scheduler allows you to easily run a suite of SQL scripts against a Postgres/Redshift database."
+readme = "README.md"
+requires-python = ">=3.6"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "asyncpg"
+]
+
+keywords = [
+  "sql",
+  "postgres",
+  "scheduler",
+  "redshift"
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project.scripts]
+sql-scheduler = "sql_scheduler.sql_scheduler:main"
