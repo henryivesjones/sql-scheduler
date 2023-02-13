@@ -38,6 +38,11 @@ _DROP_TABLE_REGEXP = re.compile(
     flags=re.IGNORECASE,
 )
 
+_DELETE_REGEXP = re.compile(
+    r'(?P<before>delete\sfrom\s*"?)([\w\d]*)(?P<after>"?\."?[\w\d]*"?)',
+    flags=re.IGNORECASE,
+)
+
 _GRANULARITY_TEST_REGEXP = re.compile(r"granularity:([\w, ]*)", flags=re.IGNORECASE)
 _GRANULARITY_TEST = """
 SELECT {columns}
@@ -204,6 +209,7 @@ class SQLTask:
                 repl = rf"\g<before>{self.dev_schema}\g<after>"
                 ddl_script = re.sub(_CREATE_TABLE_REGEXP, repl, ddl_script)
                 ddl_script = re.sub(_DROP_TABLE_REGEXP, repl, ddl_script)
+                ddl_script = re.sub(_DELETE_REGEXP, repl, ddl_script)
 
                 def repl_fn(match: re.Match):
                     schema_table = match.groups()[0].lower()
@@ -218,6 +224,7 @@ class SQLTask:
                 insert_script = re.sub(_FROM_JOIN_REGEXP, repl_fn, insert_script)
                 insert_script = re.sub(_INSERT_REGEXP, repl, insert_script)
                 insert_script = re.sub(_UPDATE_REGEXP, repl, insert_script)
+                insert_script = re.sub(_DELETE_REGEXP, repl, insert_script)
 
             conn = await asyncpg.connect(dsn=self.dsn)
             async with conn.transaction():
