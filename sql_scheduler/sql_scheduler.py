@@ -7,7 +7,7 @@ from datetime import timedelta
 from typing import List, Literal, Optional, Set
 
 from . import _constants
-from ._helpers import w_print
+from ._helpers import _SIMPLE_OUTPUT, w_print
 from .sql_task import SQLTask, SQLTaskStatus
 
 
@@ -186,6 +186,10 @@ async def execute(
         print(f"No DDL directory provided. {_constants._DDL_DIR_ENVVAR} must be set.")
         sys.exit(1)
 
+    if not os.path.exists(ddl_directory):
+        print(f"DDL Directory: {ddl_directory} is non-existent.")
+        sys.exit(1)
+
     # PARSE INSERT DIR
     insert_directory = os.environ.get(_constants._INSERT_DIR_ENVVAR)
     if insert_directory is None:
@@ -193,6 +197,11 @@ async def execute(
             f"No INSERT directory provided. {_constants._INSERT_DIR_ENVVAR} must be set."
         )
         sys.exit(1)
+
+    if not os.path.exists(insert_directory):
+        print(f"INSERT Directory: {insert_directory} is non-existent.")
+        sys.exit(1)
+
     # PARSE DSN
     dsn = os.environ.get(_constants._DSN_ENVVAR)
     if dsn is None:
@@ -278,18 +287,18 @@ async def execute(
                 num_failed_test_tasks = len(
                     [1 for task in tasks if task.status == SQLTaskStatus.TEST_FAILED]
                 )
-
-                w_print(
-                    f"{num_running_tasks} running. "
-                    f"{num_waiting_tasks} waiting. "
-                    f"{num_completed_tasks} completed. "
-                    f"{num_failed_tasks} failed. "
-                    f"{num_upstream_failed_tasks} "
-                    f"upstream failed. "
-                    f"{num_failed_test_tasks} test failed. "
-                    f"Elapsed time: {timedelta(seconds=int(time.time() - start_time))}",
-                    end="\r",
-                )
+                if not _SIMPLE_OUTPUT:
+                    w_print(
+                        f"{num_running_tasks} running. "
+                        f"{num_waiting_tasks} waiting. "
+                        f"{num_completed_tasks} completed. "
+                        f"{num_failed_tasks} failed. "
+                        f"{num_upstream_failed_tasks} "
+                        f"upstream failed. "
+                        f"{num_failed_test_tasks} test failed. "
+                        f"Elapsed time: {timedelta(seconds=int(time.time() - start_time))}",
+                        end="\r",
+                    )
                 await asyncio.sleep(_constants._EVENT_LOOP_SLEEP)
                 continue
             return tasks
@@ -320,8 +329,7 @@ def sql_scheduler(
                 check=check,
             )
         )
-    except:
-        w_print("")
+    except Exception as e:
         return
 
     failed_task_ids = []

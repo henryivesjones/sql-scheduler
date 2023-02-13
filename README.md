@@ -50,6 +50,7 @@ pip install sql-scheduler
 ### Optional Environment Variables
  - `SQL_SCHEDULER_STAGE`: The default stage (`prod`, `dev`) to run in. Can be overridden by the CLI flag `--dev` or `--prod`. When running in the dev stage a dev schema must be provided, either thru an Environment Variable, or a cli argument.
  - `SQL_SCHEDULER_DEV_SCHEMA`: The schema to replace with when run in the `dev` stage. Can be overridden by the CLI argument `--dev-schema`.
+ - `SQL_SCHEDULER_SIMPLE_OUTPUT`: Simplify the output of this program by removing the status message. (If you are running `sql-scheduler` not in the CLI then you probably want to set this to `1`)
 
 ## Common Commands
 
@@ -95,8 +96,8 @@ if __name__ == "__main__":
         dependencies=False,
         check=False,
     )
-
 ```
+To remove the in progress status message, which doesn't always play nice with python logging, set the environment variable `SQL_SCHEDULER_SIMPLE_OUTPUT` to `1`.
 
 # Tests
 You can add tests to insert scripts which will make certain assertions about the data. Currently there are three options for tests: `granularity`, `not_null`, and `relationship`. To specify a test in a script simply add the test into a comment contained within the `insert` script. A failure of a test will stop downstream tasks from running.
