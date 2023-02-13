@@ -329,7 +329,8 @@ def sql_scheduler(
                 check=check,
             )
         )
-    except Exception as e:
+    except:
+        w_print("")
         return
 
     failed_task_ids = []
