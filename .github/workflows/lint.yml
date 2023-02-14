@@ -18,6 +18,6 @@ jobs:
 
       - name: Python Lint
         run: |
-          pip install black==23.1.0
+          pip install black==22.1.0
           black . --check
         working-directory: sql_scheduler
