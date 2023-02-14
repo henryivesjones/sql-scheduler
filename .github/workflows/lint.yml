@@ -20,4 +20,4 @@ jobs:
         run: |
           pip install black==23.1.0
           black . --check
-        working-directory: sql-scheduler
+        working-directory: sql_scheduler
