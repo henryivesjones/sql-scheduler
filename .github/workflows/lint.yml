@@ -1,4 +1,4 @@
-name: sql-scheduler unit tests
+name: sql-scheduler lint
 
 on:
   pull_request:
@@ -6,7 +6,7 @@ on:
   push:
     branches: ["master"]
 jobs:
-  unit-test:
+  lint:
     runs-on: ubuntu-latest
 
     steps:
@@ -16,8 +16,8 @@ jobs:
           python-version: "3.9"
           architecture: "x64"
 
-      - name: Python Unit Tests
+      - name: Python Lint
         run: |
-          pip install build >>/dev/null
-          bash ./runUnitTests.sh
-        working-directory: scripts
+          pip install black==23.1.0
+          black . --check
+        working-directory: sql-scheduler
