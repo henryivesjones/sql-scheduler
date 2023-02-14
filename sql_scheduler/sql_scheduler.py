@@ -218,7 +218,13 @@ async def execute(
     )
     for task in tasks:
         task.remove_second_class_dependencies({task.task_id.lower() for task in tasks})
-
+    circular_dependencies = _circular_check(tasks)
+    if circular_dependencies:
+        print("Circular dependencies found... exiting.")
+        sys.exit(1)
+    if check:
+        print("No circular dependencies found...")
+        sys.exit()
     if targets is not None:
         if dependencies:
             print(f"Identifying upstream dependencies of {targets}...")
@@ -241,13 +247,7 @@ async def execute(
                 )
                 sys.exit(1)
     task_ids = {task.task_id.lower() for task in tasks}
-    circular_dependencies = _circular_check(tasks)
-    if circular_dependencies:
-        print("Circular dependencies found... exiting.")
-        sys.exit(1)
-    if check:
-        print("No circular dependencies found...")
-        sys.exit()
+
     # EXECUTION LOOP
     futures = []
     try:
