@@ -251,7 +251,6 @@ async def execute(
     # EXECUTION LOOP
     futures = []
     try:
-
         while True:
             for task in tasks:
                 if _should_start_task(task, tasks):
