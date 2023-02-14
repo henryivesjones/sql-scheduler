@@ -200,31 +200,35 @@ class SQLTask:
         await conn.close()
         return len(results) == 0, f"relationship_({relationship.replace(' ', '')})"
 
+    def _replace_for_dev(self, query: str, task_ids: Set[str]) -> str:
+        repl = rf"\g<before>{self.dev_schema}\g<after>"
+
+        def repl_fn(match: re.Match):
+            schema_table = match.groups()[0].lower()
+            if schema_table in task_ids:
+                # Should do the replacement
+                _, table = schema_table.split(".")
+                return match.group(0).replace(
+                    match.groups()[0], ".".join((self.dev_schema, table))
+                )
+            return match.group(0)
+
+        updated_query = re.sub(_CREATE_TABLE_REGEXP, repl, query)
+        updated_query = re.sub(_DROP_TABLE_REGEXP, repl, updated_query)
+        updated_query = re.sub(_DELETE_REGEXP, repl, updated_query)
+        updated_query = re.sub(_FROM_JOIN_REGEXP, repl_fn, updated_query)
+        updated_query = re.sub(_INSERT_REGEXP, repl, updated_query)
+        updated_query = re.sub(_UPDATE_REGEXP, repl, updated_query)
+        return updated_query
+
     async def execute(self, task_ids: Set[str]):
         self.status = SQLTaskStatus.RUNNING
         try:
             ddl_script = self.get_ddl()
             insert_script = self.get_insert()
             if self.stage == _constants._STAGE_DEV:
-                repl = rf"\g<before>{self.dev_schema}\g<after>"
-                ddl_script = re.sub(_CREATE_TABLE_REGEXP, repl, ddl_script)
-                ddl_script = re.sub(_DROP_TABLE_REGEXP, repl, ddl_script)
-                ddl_script = re.sub(_DELETE_REGEXP, repl, ddl_script)
-
-                def repl_fn(match: re.Match):
-                    schema_table = match.groups()[0].lower()
-                    if schema_table in task_ids:
-                        # Should do the replacement
-                        _, table = schema_table.split(".")
-                        return match.group(0).replace(
-                            match.groups()[0], ".".join((self.dev_schema, table))
-                        )
-                    return match.group(0)
-
-                insert_script = re.sub(_FROM_JOIN_REGEXP, repl_fn, insert_script)
-                insert_script = re.sub(_INSERT_REGEXP, repl, insert_script)
-                insert_script = re.sub(_UPDATE_REGEXP, repl, insert_script)
-                insert_script = re.sub(_DELETE_REGEXP, repl, insert_script)
+                ddl_script = self._replace_for_dev(ddl_script, task_ids)
+                insert_script = self._replace_for_dev(insert_script, task_ids)
 
             conn = await asyncpg.connect(dsn=self.dsn)
             async with conn.transaction():

@@ -349,7 +349,7 @@ def sql_scheduler(
         == 0
     ):
         w_print(f"Execution Complete. All {len(tasks)} tasks run successfully.")
-        sys.exit()
+        return
 
     w_print(f"Execution Complete. {len(failed_task_ids)} tasks failed:")
     for failed_task_id in sorted(failed_task_ids):

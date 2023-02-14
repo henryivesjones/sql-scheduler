@@ -1,0 +1,23 @@
+name: sql-scheduler unit tests
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: ["master"]
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+          architecture: "x64"
+
+      - name: Python Unit Tests
+        run: |
+          pip install build
+          bash ./runUnitTests.sh
+        working-directory: scripts
