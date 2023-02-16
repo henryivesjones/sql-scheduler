@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import os
+import shutil
 import sys
 import time
 from datetime import timedelta
@@ -54,11 +55,36 @@ def _parse_arguments():
         default=False,
         help="Flag to run the upstream dependencies of the given targets",
     )
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        default=False,
+        dest="no_cache",
+        help="Flag to not use cache for development run. Forces a complete run of dependencies.",
+    )
+    parser.add_argument(
+        "--clear-cache",
+        action="store_true",
+        default=False,
+        dest="clear_cache",
+        help="Clears development cache.",
+    )
+
     args = parser.parse_args()
+    if args.clear_cache:
+        shutil.rmtree(_constants._CACHE_DIR)
+        sys.exit()
     stage = args.stage
     if args.stage is None and args.dev_schema is not None:
         stage = _constants._STAGE_DEV
-    return stage, args.dev_schema, args.targets, args.dependencies, args.check
+    return (
+        stage,
+        args.dev_schema,
+        args.targets,
+        args.dependencies,
+        args.check,
+        args.no_cache,
+    )
 
 
 def _get_task_parents(task: SQLTask, tasks: List[SQLTask]) -> Set[SQLTask]:
@@ -117,6 +143,8 @@ def _parse_tasks(
     stage: Literal["prod", "dev"],
     dev_schema: str,
     dsn: str,
+    cache_duration: int,
+    no_cache: bool,
 ) -> List[SQLTask]:
     return [
         SQLTask(
@@ -126,6 +154,8 @@ def _parse_tasks(
             stage=stage,
             dev_schema=dev_schema,
             dsn=dsn,
+            cache_duration=cache_duration,
+            no_cache=no_cache,
         )
         for filename in os.listdir(insert_directory)
         if filename[-1 * len(_constants._TASK_FILE_ENDING) :]
@@ -163,6 +193,7 @@ async def execute(
     targets: Optional[List[str]] = None,
     dependencies: bool = False,
     check: bool = False,
+    no_cache: bool = False,
 ) -> List[SQLTask]:
     start_time = time.time()
     # PARSE STAGE (dev, prod)
@@ -170,6 +201,19 @@ async def execute(
         stage = os.environ.get(_constants._STAGE_ENVVAR, _constants._STAGE_PROD)  # type: ignore
         if stage not in (_constants._STAGE_PROD, _constants._STAGE_DEV):
             stage = _constants._STAGE_PROD
+
+    # PARSE CACHE DURATION
+    cache_duration = os.environ.get(
+        _constants._CACHE_DURATION_ENVVAR, _constants._BASE_CACHE_DURATION
+    )
+    try:
+        cache_duration = int(cache_duration)
+    except ValueError:
+        print(
+            f"{_constants._CACHE_DURATION_ENVVAR} is set to an invalid value: {cache_duration}. "
+            f"Must be set to a number. Defaulting to {_constants._BASE_CACHE_DURATION}"
+        )
+        cache_duration = _constants._BASE_CACHE_DURATION
 
     # PARSE DEV SCHEMA
     if dev_schema is None:
@@ -215,6 +259,8 @@ async def execute(
         stage=stage,
         dev_schema=dev_schema or "",
         dsn=dsn,
+        cache_duration=cache_duration,
+        no_cache=no_cache,
     )
     for task in tasks:
         task.remove_second_class_dependencies({task.task_id.lower() for task in tasks})
@@ -234,6 +280,7 @@ async def execute(
                 if len(target_task) != 1:
                     print(f"Target {target} is non-existent.")
                     sys.exit(1)
+                target_task[0].no_cache = True
                 subset_tasks.update(_get_task_parents(target_task[0], tasks))
             print(
                 f"Found {len(subset_tasks) - len(targets)} tasks in upstream dependencies."
@@ -241,6 +288,8 @@ async def execute(
             tasks = list(subset_tasks)
         else:
             tasks = [task for task in tasks if task.task_id in targets]
+            for task in tasks:
+                task.no_cache = True
             if len(tasks) != len(targets):
                 print(
                     f"Unknown Target: {set(targets) - {task.task_id for task in tasks}}"
@@ -317,6 +366,7 @@ def sql_scheduler(
     targets: Optional[List[str]] = None,
     dependencies: bool = False,
     check: bool = False,
+    no_cache: bool = False,
 ):
     try:
         tasks = asyncio.run(
@@ -326,6 +376,7 @@ def sql_scheduler(
                 targets=targets,
                 dependencies=dependencies,
                 check=check,
+                no_cache=no_cache,
             )
         )
     except:
@@ -371,13 +422,15 @@ def sql_scheduler(
 
 
 def main():
-    stage, dev_schema, targets, dependencies, check = _parse_arguments()
+    os.makedirs(_constants._CACHE_DIR, exist_ok=True)
+    stage, dev_schema, targets, dependencies, check, no_cache = _parse_arguments()
     sql_scheduler(
         stage=stage,
         dev_schema=dev_schema,
         targets=targets,
         dependencies=dependencies,
         check=check,
+        no_cache=no_cache,
     )
 
 

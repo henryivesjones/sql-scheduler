@@ -1,4 +1,9 @@
+import os
+
 _EVENT_LOOP_SLEEP = 0.25
+
+_CACHE_DIR = os.path.join(os.path.expanduser("~"), ".sql-scheduler/cache")
+_BASE_CACHE_DURATION = 6 * 60 * 60  # 6 Hours
 
 _TASK_FILE_ENDING = ".sql"
 
@@ -9,6 +14,7 @@ _STAGE_ENVVAR = f"{_ENVVAR_PREFIX}_STAGE"
 _DEV_SCHEMA_ENVVAR = f"{_ENVVAR_PREFIX}_DEV_SCHEMA"
 _DSN_ENVVAR = f"{_ENVVAR_PREFIX}_DSN"
 _SIMPLE_OUTPUT_ENVVAR = f"{_ENVVAR_PREFIX}_SIMPLE_OUTPUT"
+_CACHE_DURATION_ENVVAR = f"{_ENVVAR_PREFIX}_CACHE_DURATION"
 
 _STAGE_PROD = "prod"
 _STAGE_DEV = "dev"

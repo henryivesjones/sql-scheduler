@@ -51,6 +51,7 @@ pip install sql-scheduler
  - `SQL_SCHEDULER_STAGE`: The default stage (`prod`, `dev`) to run in. Can be overridden by the CLI flag `--dev` or `--prod`. When running in the dev stage a dev schema must be provided, either thru an Environment Variable, or a cli argument.
  - `SQL_SCHEDULER_DEV_SCHEMA`: The schema to replace with when run in the `dev` stage. Can be overridden by the CLI argument `--dev-schema`.
  - `SQL_SCHEDULER_SIMPLE_OUTPUT`: Simplify the output of this program by removing the status message. (If you are running `sql-scheduler` not in the CLI then you probably want to set this to `1`)
+ - `SQL_SCHEDULER_CACHE_DURATION`: The length of time for development cache runs to be valid (specified in seconds). Defaults to 6 hours.
 
 ## Common Commands
 
@@ -132,6 +133,20 @@ relationship: column_b = schema.table.column_b
 Before execution of a run, `sql-scheduler` parses all of the scripts found in the `ddl` and `insert` folders and identifies dependencies between scripts. It is able to do this by identifying tables referenced in `FROM` and `JOIN` statements within the `insert` query. During the execution of a run `sql-scheduler` ensures that any upstream dependencies have completed successfully before executing.
 
 `sql-scheduler` will notify you of any circular dependencies found and exit. This can be checked without initiating a run with the flag `--check`.
+
+# Development script caching
+`sql-scheduler` keeps track of scripts that are run in `dev` stage with a cache, this is then leveraged so that you don't have to re-run upstream dependency scripts if they haven't changed. To disable this functionality use the `--no-cache` flag. No caching is done in the `prod` stage.
+
+When a script is run in the `dev` stage a cache record is made with the current time and a hash of the ddl and insert scripts. This hash and time is used to evaluate if the script needs to be run.
+
+Scripts explicitly targeted (`-t`) are always run.
+
+To clear the local cache run:
+```
+sql-scheduler --clear-cache
+```
+
+The caches are held in the `$HOME/.sql-scheduler/cache` directory.
 
 # Automatic dev-schema replacement
 A key feature of `sql-scheduler` is the ability to write scripts targeting a prod schema/s, and test these scripts inserting into a development schema. When combining this feature with the dependency inference this can make your development experience much much smoother. Not only will the insert/ddl schema change, but any references (from, join) inside the insert script will be switched to point to the dev schema IF that table will be populated by the current run of `sql-scheduler`.

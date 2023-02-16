@@ -1,6 +1,8 @@
 import asyncio
+import hashlib
 import os
 import re
+import time
 from enum import Enum
 from typing import List, Literal, Set
 
@@ -99,6 +101,9 @@ class SQLTask:
     dev_schema: str
     dsn: str
     failed_tests: List[str]
+    cache_duration: int
+    cache_filename: str
+    no_cache: bool
 
     def __init__(
         self,
@@ -108,6 +113,8 @@ class SQLTask:
         stage: Literal["prod", "dev"],
         dev_schema: str,
         dsn: str,
+        cache_duration: int,
+        no_cache: bool,
     ):
         self.task_id = task_id
         self.ddl_directory = ddl_directory
@@ -115,6 +122,11 @@ class SQLTask:
         self.stage = stage
         self.dev_schema = dev_schema
         self.dsn = dsn
+        self.cache_duration = cache_duration
+        self.cache_filename = os.path.join(
+            _constants._CACHE_DIR, f"{self.task_id.lower()}.txt"
+        )
+        self.no_cache = no_cache
 
         self.dependencies = self._parse_dependencies()
         self.status = SQLTaskStatus.WAITING
@@ -221,6 +233,34 @@ class SQLTask:
         updated_query = re.sub(_UPDATE_REGEXP, repl, updated_query)
         return updated_query
 
+    def _create_cache_key(self, ddl_script: str, insert_script: str):
+        return f'{hashlib.sha256(ddl_script.encode("utf-8")).hexdigest()}_{hashlib.sha256(insert_script.encode("utf-8")).hexdigest()}'
+
+    def _set_cache(self, ddl_script: str, insert_script: str):
+        with open(self.cache_filename, "w") as cache_file:
+            cache_file.write(f"{self._create_cache_key(ddl_script, insert_script)}")
+            cache_file.write(",")
+            cache_file.write(f"{time.time()}")
+
+    def _check_is_cached(self, ddl_script: str, insert_script: str):
+        if not os.path.exists(self.cache_filename):
+            return False
+        with open(self.cache_filename, "r") as cache_file:
+            cache_file_contents = cache_file.read()
+        try:
+            cache_key, cache_set_time = cache_file_contents.split(",")
+            cache_set_time = float(cache_set_time)
+        except:
+            os.remove(self.cache_filename)
+            return False
+        if time.time() - cache_set_time > self.cache_duration:
+            os.remove(self.cache_filename)
+            return False
+        if not self._create_cache_key(ddl_script, insert_script) == cache_key:
+            os.remove(self.cache_filename)
+            return False
+        return True
+
     async def execute(self, task_ids: Set[str]):
         self.status = SQLTaskStatus.RUNNING
         try:
@@ -229,6 +269,12 @@ class SQLTask:
             if self.stage == _constants._STAGE_DEV:
                 ddl_script = self._replace_for_dev(ddl_script, task_ids)
                 insert_script = self._replace_for_dev(insert_script, task_ids)
+                if not self.no_cache and self._check_is_cached(
+                    ddl_script, insert_script
+                ):
+                    w_print(f"Task {self.task_id.lower()} cached.")
+                    self.status = SQLTaskStatus.SUCCESS
+                    return
 
             conn = await asyncpg.connect(dsn=self.dsn)
             async with conn.transaction():
@@ -293,5 +339,7 @@ class SQLTask:
             print(e)
             self.status = SQLTaskStatus.FAILED
             return
+        if self.stage == _constants._STAGE_DEV:
+            self._set_cache(ddl_script, insert_script)
         w_print(f"Task {self.task_id.lower()} complete.")
         self.status = SQLTaskStatus.SUCCESS
