@@ -330,7 +330,7 @@ def sql_scheduler(
         )
     except:
         w_print("")
-        return
+        sys.exit(1)
 
     failed_task_ids = []
     test_failed_tasks = []
