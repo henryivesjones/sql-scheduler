@@ -224,7 +224,7 @@ async def execute(
         sys.exit(1)
     if check:
         print("No circular dependencies found...")
-        sys.exit()
+        return tasks
     if targets is not None:
         if dependencies:
             print(f"Identifying upstream dependencies of {targets}...")
@@ -331,7 +331,8 @@ def sql_scheduler(
     except:
         w_print("")
         sys.exit(1)
-
+    if check:
+        return
     failed_task_ids = []
     test_failed_tasks = []
     upstream_failed_task_ids = []
