@@ -14,11 +14,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 echo "Installing sql-scheduler in test virtual environment..."
 
-cd ../../
-
-pip3 install . >>/dev/null
-
-cd "$(dirname "${BASH_SOURCE[0]}")"
+pip3 install "../../dist/$(ls -AU ../../dist | head -1)" >>/dev/null
 
 export INTEGRATION_PG_PORT=9876
 export SQL_SCHEDULER_DEV_SCHEMA="dev"
