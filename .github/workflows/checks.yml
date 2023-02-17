@@ -51,4 +51,4 @@ jobs:
         run: |
           pip install build >>/dev/null
           bash ./runIntegrationTests.sh
-        working-directory: test/integration
+        working-directory: tests/integration
