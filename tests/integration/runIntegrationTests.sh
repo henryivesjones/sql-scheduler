@@ -8,6 +8,8 @@ rm -rf dist
 python3 -m build >>/dev/null
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
+pwd
+ls
 
 rm -rf .venv
 python3 -m venv .venv
