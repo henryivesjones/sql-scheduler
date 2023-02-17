@@ -154,7 +154,10 @@ class SQLTask:
 
     def _parse_dependencies(self) -> Set[str]:
         return set(
-            [table.lower() for table in _FROM_JOIN_REGEXP.findall(self.get_insert())]
+            [
+                table.lower().replace('"', "")
+                for table in _FROM_JOIN_REGEXP.findall(self.get_insert())
+            ]
         )
 
     def remove_second_class_dependencies(
@@ -238,7 +241,7 @@ class SQLTask:
 
     def _set_cache(self, ddl_script: str, insert_script: str):
         with open(self.cache_filename, "w") as cache_file:
-            cache_file.write(f"{self._create_cache_key(ddl_script, insert_script)}")
+            cache_file.write(self._create_cache_key(ddl_script, insert_script))
             cache_file.write(",")
             cache_file.write(f"{time.time()}")
 

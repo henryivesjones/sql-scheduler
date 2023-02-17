@@ -28,8 +28,8 @@ def nostdout():
 
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
-ddl_path = os.path.join(dir_path, "test_cases", "ddl")
-insert_path = os.path.join(dir_path, "test_cases", "insert")
+ddl_path = os.path.join(dir_path, "sql_scheduler_helpers_test_cases", "ddl")
+insert_path = os.path.join(dir_path, "sql_scheduler_helpers_test_cases", "insert")
 
 
 def generate_sql_tasks(

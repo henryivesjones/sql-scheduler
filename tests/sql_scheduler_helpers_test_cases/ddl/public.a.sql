@@ -1,5 +1,4 @@
-DROP TABLE
-  if exists public.a
+DROP TABLE IF EXISTS public.a
 ;
 
 CREATE TABLE

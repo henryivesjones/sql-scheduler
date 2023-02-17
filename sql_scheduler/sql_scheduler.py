@@ -422,7 +422,10 @@ def sql_scheduler(
 
 
 def main():
-    os.makedirs(_constants._CACHE_DIR, exist_ok=True)
+    try:
+        os.makedirs(_constants._CACHE_DIR, exist_ok=True)
+    except:
+        print(f'WARNING: Unable to create cache directory {_constants._CACHE_DIR}')
     stage, dev_schema, targets, dependencies, check, no_cache = _parse_arguments()
     sql_scheduler(
         stage=stage,
