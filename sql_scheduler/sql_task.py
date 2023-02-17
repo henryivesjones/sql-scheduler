@@ -21,7 +21,7 @@ class SQLTaskInsertFileNotExists(Exception):
 
 
 _FROM_JOIN_REGEXP = re.compile(
-    r"""(?:from|join)\s+"?(?P<after>[\w\d]*?"?\."?[\w\d]*)"?\s*""", flags=re.IGNORECASE
+    r"""(?:from|join)\s+(?P<after>"?[\w\d]*?"?\."?[\w\d]*"?)\s*""", flags=re.IGNORECASE
 )
 _INSERT_REGEXP = re.compile(
     r'(?P<before>insert\s*into\s*"?)([\w\d]*)(?P<after>"?\."?[\w\d]*"?)',
@@ -219,7 +219,7 @@ class SQLTask:
         repl = rf"\g<before>{self.dev_schema}\g<after>"
 
         def repl_fn(match: re.Match):
-            schema_table = match.groups()[0].lower()
+            schema_table = match.groups()[0].lower().replace('"', "")
             if schema_table in task_ids:
                 # Should do the replacement
                 _, table = schema_table.split(".")
@@ -230,8 +230,8 @@ class SQLTask:
 
         updated_query = re.sub(_CREATE_TABLE_REGEXP, repl, query)
         updated_query = re.sub(_DROP_TABLE_REGEXP, repl, updated_query)
-        updated_query = re.sub(_DELETE_REGEXP, repl, updated_query)
         updated_query = re.sub(_FROM_JOIN_REGEXP, repl_fn, updated_query)
+        updated_query = re.sub(_DELETE_REGEXP, repl, updated_query)
         updated_query = re.sub(_INSERT_REGEXP, repl, updated_query)
         updated_query = re.sub(_UPDATE_REGEXP, repl, updated_query)
         return updated_query
@@ -264,6 +264,12 @@ class SQLTask:
             return False
         return True
 
+    def _get_analyze(self):
+        schema, table = self.task_id.lower().split(".")
+        if self.stage == _constants._STAGE_DEV:
+            schema = self.dev_schema
+        return f"ANALYZE {schema}.{table};"
+
     async def execute(self, task_ids: Set[str]):
         self.status = SQLTaskStatus.RUNNING
         try:
@@ -283,6 +289,8 @@ class SQLTask:
             async with conn.transaction():
                 await conn.execute(ddl_script)
                 await conn.execute(insert_script)
+                await conn.execute(self._get_analyze())
+
             await conn.close()
 
             test_futures = []
