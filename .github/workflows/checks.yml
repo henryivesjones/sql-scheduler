@@ -1,0 +1,54 @@
+name: sql-scheduler lint
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: ["master"]
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+          architecture: "x64"
+
+      - name: Python Lint
+        run: |
+          pip install black==23.1.0
+          black . --check
+        working-directory: sql_scheduler
+
+  unit-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+          architecture: "x64"
+
+      - name: Python Unit Tests
+        run: |
+          pip install build >>/dev/null
+          bash ./runUnitTests.sh
+        working-directory: scripts
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+          architecture: "x64"
+
+      - name: Integration Tests
+        run: |
+          pip install build >>/dev/null
+          bash ./runIntegrationTests.sh
+        working-directory: test/integration
