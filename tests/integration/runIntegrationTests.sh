@@ -1,22 +1,28 @@
 #!/bin/bash
 set -e
-cd "$(dirname "${BASH_SOURCE[0]}")"
-cd ../../
+if [ -z ${GITHUB_ACTION+x} ]; then
+    cd ../../
+    python3 -m build >>/dev/null
+    pip3 install .
+else
+    cd "$(dirname "${BASH_SOURCE[0]}")"
+    cd ../../
 
-echo "Building sql-scheduler from source..."
-rm -rf dist
-python3 -m build >>/dev/null
+    echo "Building sql-scheduler from source..."
+    rm -rf dist
+    python3 -m build >>/dev/null
 
-cd "$(dirname "${BASH_SOURCE[0]}")"
-pwd
-ls
+    cd "$(dirname "${BASH_SOURCE[0]}")"
 
-rm -rf .venv
-python3 -m venv .venv
-source .venv/bin/activate
-echo "Installing sql-scheduler in test virtual environment..."
+    rm -rf .venv
+    python3 -m venv .venv
+    source .venv/bin/activate
+    echo "Installing sql-scheduler in test virtual environment..."
+    cd ../../
+    pip3 install . >>/dev/null
 
-pip3 install "../../dist/$(ls -AU ../../dist | head -1)" >>/dev/null
+fi
+cd tests/integration
 
 export INTEGRATION_PG_PORT=9876
 export SQL_SCHEDULER_DEV_SCHEMA="dev"

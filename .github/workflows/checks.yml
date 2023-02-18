@@ -48,6 +48,8 @@ jobs:
           architecture: "x64"
 
       - name: Integration Tests
+        env:
+          GITHUB_ACTION: 1
         run: |
           pip install build >>/dev/null
           bash ./runIntegrationTests.sh
