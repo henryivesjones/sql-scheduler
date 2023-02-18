@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-if [ -z ${GITHUB_ACTION+x} ]; then
+if [ -n "$GITHUB_ACTION" ]; then
     cd ../../
     python3 -m build >>/dev/null
     pip3 install .

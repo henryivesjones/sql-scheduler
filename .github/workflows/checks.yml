@@ -49,7 +49,7 @@ jobs:
 
       - name: Integration Tests
         env:
-          GITHUB_ACTION: 1
+          GITHUB_ACTION: "YES"
         run: |
           pip install build >>/dev/null
           bash ./runIntegrationTests.sh
