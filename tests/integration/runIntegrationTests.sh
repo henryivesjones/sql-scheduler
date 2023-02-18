@@ -1,23 +1,18 @@
 #!/bin/bash
 set -e
+echo "Building and installing sql-scheduler in test virtual environment..."
 if [ -n "$GITHUB_ACTION" ]; then
     cd ../../
-    python3 -m build >>/dev/null
-    pip3 install .
+    pip3 install . >>/dev/null
 else
     cd "$(dirname "${BASH_SOURCE[0]}")"
     cd ../../
-
-    echo "Building sql-scheduler from source..."
-    rm -rf dist
-    python3 -m build >>/dev/null
 
     cd "$(dirname "${BASH_SOURCE[0]}")"
 
     rm -rf .venv
     python3 -m venv .venv
     source .venv/bin/activate
-    echo "Installing sql-scheduler in test virtual environment..."
     cd ../../
     pip3 install . >>/dev/null
 
