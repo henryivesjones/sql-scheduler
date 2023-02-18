@@ -38,7 +38,6 @@ python3 integration.py || EXIT_CODE=$?
 docker stop sql-scheduler-integration-pg >>/dev/null
 docker rm sql-scheduler-integration-pg >>/dev/null
 
-deactivate
 rm -rf .venv
 
 exit $EXIT_CODE
