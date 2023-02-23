@@ -8,7 +8,7 @@ from datetime import timedelta
 from typing import List, Literal, Optional, Set
 
 from . import _constants
-from ._helpers import _SIMPLE_OUTPUT, w_print
+from ._helpers import _SIMPLE_OUTPUT, construct_table, w_print
 from .sql_task import SQLTask, SQLTaskStatus
 
 
@@ -395,14 +395,45 @@ def sql_scheduler(
         if task.status == SQLTaskStatus.UPSTREAM_FAILED:
             upstream_failed_task_ids.append(task.task_id.lower())
 
+    w_print(f"Execution Complete.")
+    print(
+        construct_table(
+            ["task_id", "script duration (s)", "test duration (s)"],
+            [
+                (
+                    task.task_id.lower(),
+                    str(
+                        round(
+                            task.script_duration
+                            if task.script_duration is not None
+                            else -1,
+                            1,
+                        )
+                    ),
+                    str(
+                        round(
+                            task.test_duration
+                            if task.test_duration is not None
+                            else -1,
+                            1,
+                        )
+                    ),
+                )
+                for task in sorted(
+                    filter(lambda task: task.status != SQLTaskStatus.WAITING, tasks),
+                    key=lambda task: task.start_timestamp,
+                )
+            ],
+        )
+    )
     if (
         len(failed_task_ids) + len(test_failed_tasks) + len(upstream_failed_task_ids)
         == 0
     ):
-        w_print(f"Execution Complete. All {len(tasks)} tasks run successfully.")
+        print(f"All {len(tasks)} tasks run successfully.")
         return
 
-    w_print(f"Execution Complete. {len(failed_task_ids)} tasks failed:")
+    print(f"{len(failed_task_ids)} tasks failed:")
     for failed_task_id in sorted(failed_task_ids):
         print(f" - {failed_task_id}")
 

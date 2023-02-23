@@ -1,13 +1,7 @@
 #!/bin/bash
 set -e
 cd "$(dirname "${BASH_SOURCE[0]}")"
-cd ..
-
-echo "Building sql-scheduler from source..."
-rm -rf dist
-python3 -m build >>/dev/null
-
-cd tests
+cd ../tests
 
 rm -rf .venv
 python3 -m venv .venv

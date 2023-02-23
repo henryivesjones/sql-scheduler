@@ -278,5 +278,68 @@ class TestReplaceForDev(unittest.TestCase):
             self.assertEqual(solution_file.read(), replaced_query)
 
 
+class TestCleanSQL(unittest.TestCase):
+    def test_noop(self):
+        task = SQLTask(
+            ddl_path,
+            insert_path,
+            "public.multiple_from",
+            "prod",
+            "dev_schema",
+            "",
+            600,
+            False,
+        )
+        self.assertEqual(task.get_ddl(), task._clean_sql_script(task.get_ddl()))
+        self.assertEqual(task.get_insert(), task._clean_sql_script(task.get_insert()))
+
+    def test_multiline_comments(self):
+        task = SQLTask(
+            ddl_path,
+            insert_path,
+            "public.multiline_comments",
+            "prod",
+            "dev_schema",
+            "",
+            600,
+            False,
+        )
+        cleaned_insert = (
+            "\n"
+            + """
+insert into public.multiline_comments  (
+    select  column_a
+    from public.table_a
+);
+        """.strip()
+            + "\n"
+        )
+        self.assertEqual(cleaned_insert, task._clean_sql_script(task.get_insert()))
+
+    def test_singleline_comments(self):
+        task = SQLTask(
+            ddl_path,
+            insert_path,
+            "public.single_comments",
+            "prod",
+            "dev_schema",
+            "",
+            600,
+            False,
+        )
+        cleaned_insert = (
+            "\n"
+            + """
+insert into public.single_comments
+(
+select '--test\\n'
+from public.table_a
+);
+        """.strip()
+        )
+
+        self.assertEqual(cleaned_insert, task._clean_sql_script(task.get_insert()))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -4,7 +4,7 @@ import os
 import re
 import time
 from enum import Enum
-from typing import List, Literal, Set
+from typing import List, Literal, Set, Union
 
 import asyncpg
 
@@ -19,6 +19,12 @@ class SQLTaskDDLFileNotExists(Exception):
 class SQLTaskInsertFileNotExists(Exception):
     pass
 
+
+_MULTILINE_COMMENT_REGEXP = re.compile(r"""\/\*[\s\S]*?\*\/""", flags=re.IGNORECASE)
+
+_COMMENT_REGEXP = re.compile(
+    r"""(?<!')--[^\r\n]*?$""", flags=re.IGNORECASE | re.MULTILINE
+)
 
 _FROM_JOIN_REGEXP = re.compile(
     r"""(?:from|join)\s+(?P<after>"?[\w\d]*?"?\."?[\w\d]*"?)\s*""", flags=re.IGNORECASE
@@ -104,6 +110,10 @@ class SQLTask:
     cache_duration: int
     cache_filename: str
     no_cache: bool
+    start_timestamp: float
+    script_duration: Union[float, None] = None
+    test_start_timestamp: Union[float, None] = None
+    test_duration: Union[float, None] = None
 
     def __init__(
         self,
@@ -152,11 +162,19 @@ class SQLTask:
         with open(insert_file_path, "r") as f:
             return f.read()
 
+    def _clean_sql_script(self, query: str) -> str:
+        """removes comments from sql scripts"""
+        cleaned_query = _COMMENT_REGEXP.sub("", query)
+        cleaned_query = _MULTILINE_COMMENT_REGEXP.sub("", cleaned_query)
+        return cleaned_query
+
     def _parse_dependencies(self) -> Set[str]:
         return set(
             [
                 table.lower().replace('"', "")
-                for table in _FROM_JOIN_REGEXP.findall(self.get_insert())
+                for table in _FROM_JOIN_REGEXP.findall(
+                    self._clean_sql_script(self.get_insert())
+                )
             ]
         )
 
@@ -272,6 +290,7 @@ class SQLTask:
 
     async def execute(self, task_ids: Set[str]):
         self.status = SQLTaskStatus.RUNNING
+        self.start_timestamp = time.time()
         try:
             ddl_script = self.get_ddl()
             insert_script = self.get_insert()
@@ -290,9 +309,10 @@ class SQLTask:
                 await conn.execute(ddl_script)
                 await conn.execute(insert_script)
                 await conn.execute(self._get_analyze())
-
             await conn.close()
+            self.script_duration = time.time() - self.start_timestamp
 
+            self.test_start_timestamp = time.time()
             test_futures = []
             granularity_columns_match = _GRANULARITY_TEST_REGEXP.search(insert_script)
             if granularity_columns_match is not None:
@@ -337,6 +357,7 @@ class SQLTask:
                 result, test_name = await test
                 if not result:
                     self.failed_tests.append(test_name)
+            self.test_duration = time.time() - self.test_start_timestamp
 
             if len(self.failed_tests) > 0:
                 w_print(
@@ -348,6 +369,8 @@ class SQLTask:
         except Exception as e:
             w_print(f"Task {self.task_id.lower()} failed:")
             print(e)
+            if self.script_duration is None:
+                self.script_duration = time.time() - self.start_timestamp
             self.status = SQLTaskStatus.FAILED
             return
         if self.stage == _constants._STAGE_DEV:
