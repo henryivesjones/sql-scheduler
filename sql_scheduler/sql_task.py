@@ -115,7 +115,7 @@ class SQLTask:
     cache_duration: int
     cache_filename: str
     no_cache: bool
-    start_timestamp: float
+    start_timestamp: float = 0
     script_duration: Union[float, None] = None
     test_start_timestamp: Union[float, None] = None
     test_duration: Union[float, None] = None

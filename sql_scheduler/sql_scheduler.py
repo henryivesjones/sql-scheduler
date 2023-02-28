@@ -487,7 +487,11 @@ def sql_scheduler(
                     ),
                 )
                 for task in sorted(
-                    filter(lambda task: task.status != SQLTaskStatus.WAITING, tasks),
+                    filter(
+                        lambda task: task.status
+                        not in (SQLTaskStatus.WAITING, SQLTaskStatus.UPSTREAM_FAILED),
+                        tasks,
+                    ),
                     key=lambda task: task.start_timestamp,
                 )
             ],
