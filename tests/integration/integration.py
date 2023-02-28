@@ -73,13 +73,11 @@ FROM {table}
     return f'Row count for {table} ({results[0]["count"]}) did not match expected ({length})'
 
 
-def _run_sql_scheduler_command(args: str):
-    result = subprocess.run(
-        args=["sql-scheduler", *args.split(" ")], stdout=subprocess.DEVNULL
-    )
+def _run_sql_scheduler_command(args: list):
+    result = subprocess.run(args=["sql-scheduler", *args], stdout=subprocess.DEVNULL)
 
 
-ALL_TABLES = {"table_a", "table_b", "table_c"}
+ALL_TABLES = {"table_a", "table_b", "table_c", "table_d"}
 SCHEMAS = {"prod", "dev"}
 ALL_TABLES_AND_SCHEMAS = {
     f"{schema}.{table}" for schema in SCHEMAS for table in ALL_TABLES
@@ -87,32 +85,34 @@ ALL_TABLES_AND_SCHEMAS = {
 
 TEST_CASES = [
     {
-        "args": "--prod",
-        "exists": {"prod.table_a", "prod.table_b", "prod.table_c"},
+        "args": [["--prod"]],
+        "exists": {"prod.table_a", "prod.table_b", "prod.table_c", "prod.table_d"},
         "table_lengths": [
             ("prod.table_a", 11),
             ("prod.table_b", 3),
             ("prod.table_c", 5),
+            ("prod.table_d", 0),
         ],
     },
     {
-        "args": "--dev",
-        "exists": {"dev.table_a", "dev.table_b", "dev.table_c"},
+        "args": [["--dev"]],
+        "exists": {"dev.table_a", "dev.table_b", "dev.table_c", "dev.table_d"},
         "table_lengths": [
             ("dev.table_a", 11),
             ("dev.table_b", 3),
             ("dev.table_c", 5),
+            ("dev.table_d", 0),
         ],
     },
     {
-        "args": "--prod -t prod.table_a",
+        "args": [["--prod", "-t", "prod.table_a"]],
         "exists": {"prod.table_a"},
         "table_lengths": [
             ("prod.table_a", 11),
         ],
     },
     {
-        "args": "--prod -t prod.table_c --dependencies",
+        "args": [["--prod", "-t", "prod.table_c", "--dependencies"]],
         "exists": {"prod.table_a", "prod.table_c"},
         "table_lengths": [
             ("prod.table_a", 11),
@@ -120,8 +120,14 @@ TEST_CASES = [
         ],
     },
     {
-        "args": ["--prod", "--dev -t prod.table_c"],
-        "exists": {"prod.table_a", "prod.table_b", "prod.table_c", "dev.table_c"},
+        "args": [["--prod"], ["--dev", "-t", "prod.table_c"]],
+        "exists": {
+            "prod.table_a",
+            "prod.table_b",
+            "prod.table_c",
+            "prod.table_d",
+            "dev.table_c",
+        },
         "table_lengths": [
             ("prod.table_a", 11),
             ("prod.table_b", 3),
@@ -130,11 +136,12 @@ TEST_CASES = [
         ],
     },
     {
-        "args": ["--prod", "--dev -t prod.table_c --dependencies"],
+        "args": [["--prod"], ["--dev", "-t", "prod.table_c", "--dependencies"]],
         "exists": {
             "prod.table_a",
             "prod.table_b",
             "prod.table_c",
+            "prod.table_d",
             "dev.table_c",
             "dev.table_a",
         },
@@ -146,6 +153,46 @@ TEST_CASES = [
             ("dev.table_a", 11),
         ],
     },
+    {
+        "args": [
+            [
+                "--prod",
+                "-t",
+                "prod.table_d",
+                "--start",
+                "2023-01-01 00:00:00",
+                "--end",
+                "2023-01-02 23:59:59",
+            ]
+        ],
+        "exists": {"prod.table_d"},
+        "table_lengths": [("prod.table_d", 6)],
+    },
+    {
+        "args": [
+            [
+                "--prod",
+                "-t",
+                "prod.table_d",
+                "--start",
+                "2023-01-01 00:00:00",
+                "--end",
+                "2023-01-02 23:59:59",
+            ],
+            [
+                "--prod",
+                "-t",
+                "prod.table_d",
+                "--refill",
+                "--start",
+                "2023-01-03 00:00:00",
+                "--end",
+                "2023-01-04 23:59:59",
+            ],
+        ],
+        "exists": {"prod.table_d"},
+        "table_lengths": [("prod.table_d", 3)],
+    },
 ]
 
 
@@ -155,11 +202,8 @@ async def main():
         print(f'Running test case {test_case["args"]}')
         await _reset_schemas()
 
-        if isinstance(test_case["args"], str):
-            _run_sql_scheduler_command(test_case["args"])
-        elif isinstance(test_case["args"], list):
-            for args in test_case["args"]:
-                _run_sql_scheduler_command(args)
+        for args in test_case["args"]:
+            _run_sql_scheduler_command(args)
 
         tables_exist = await _assert_tables_exists(test_case["exists"])
         if tables_exist is not None:

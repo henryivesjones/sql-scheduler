@@ -30,6 +30,12 @@ CREATE TABLE raw_d.raw_table_c (
     column_e VARCHAR(12)
 );
 """,
+    """
+CREATE TABLE raw_d.raw_table_d (
+    column_dt TIMESTAMP,
+    column_a INT
+);
+""",
 ]
 
 _INSERT = [
@@ -75,13 +81,28 @@ INSERT INTO raw_d.raw_table_c VALUES
 (4, 33)
 ;
     """,
+    """
+INSERT INTO raw_d.raw_table_d VALUES
+('2023-01-01 00:00:00', 1),
+('2023-01-02 00:00:00', 1),
+('2023-01-03 00:00:00', 1),
+('2023-01-04 00:00:00', 1),
+('2023-01-01 00:00:00', 2),
+('2023-01-02 00:00:00', 2),
+('2023-01-03 00:00:00', 2),
+('2023-01-01 00:00:00', 3),
+('2023-01-02 00:00:00', 3)
+;
+    """,
 ]
 
 _INSERT_VERIFICATION = """
 SELECT COUNT(1)
 FROM raw_d.raw_table_a a
 INNER JOIN raw_d.raw_table_b b on a.column_a = b.column_a
-INNER JOIN raw_d.raw_table_c c on b.column_d = c.column_d;
+INNER JOIN raw_d.raw_table_c c on b.column_d = c.column_d
+INNER JOIN raw_d.raw_table_d d on a.column_a = d.column_a
+;
 """
 
 
@@ -110,8 +131,8 @@ async def main():
     if len(result) != 1:
         print("Failed setup data validation (FATAL)")
         sys.exit(1)
-    if result[0]["count"] != 48:
-        print("Failed setup data validation (ROWCOUNT)")
+    if result[0]["count"] != 192:
+        print(f"Failed setup data validation (ROWCOUNT) ({result[0]['count']})")
         sys.exit(1)
     print("Setup data passed validation.")
 

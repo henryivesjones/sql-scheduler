@@ -32,6 +32,7 @@ Ensuring that script B which selects from the table created in script A runs aft
 Scripts will be run concurrently if they don't depend on each other.
 
  4. Easy unit testing for table granularity, column nullability, and table relationships
+ 5. Incremental table inserts.
 
 # Quickstart:
 
@@ -51,7 +52,8 @@ pip install sql-scheduler
  - `SQL_SCHEDULER_STAGE`: The default stage (`prod`, `dev`) to run in. Can be overridden by the CLI flag `--dev` or `--prod`. When running in the dev stage a dev schema must be provided, either thru an Environment Variable, or a cli argument.
  - `SQL_SCHEDULER_DEV_SCHEMA`: The schema to replace with when run in the `dev` stage. Can be overridden by the CLI argument `--dev-schema`.
  - `SQL_SCHEDULER_SIMPLE_OUTPUT`: Simplify the output of this program by removing the status message. (If you are running `sql-scheduler` not in the CLI then you probably want to set this to `1`)
- - `SQL_SCHEDULER_CACHE_DURATION`: The length of time for development cache runs to be valid (specified in seconds). Defaults to 6 hours.
+ - `SQL_SCHEDULER_CACHE_DURATION`: The length of time for development cache runs to be valid (specified in seconds). Defaults to 6 hours
+ - `SQL_SCHEDULER_INCREMENTAL_INTERVAL`: The number of days for the default incremental window (defaults to 14). Incremental windows starts at `00:00:00` 14 days ago and ends at `23:59:59.999` on the current day. The interval can be overridden by setting the `--start` and `--end` cli values.
 
 ## Common Commands
 
@@ -311,6 +313,29 @@ INSERT INTO dev_schema.table_d (
     group by 1, 2
 );
 ```
+# Incremental table inserts
+Sometimes you may not want to drop and recreate each table every time, but instead want to update only the most recent data. To utilize this functionality within `sql-scheduler` you must enable it with the `--sql-scheduler-incremental` comment within the insert script, as well as implement a delete function. When the `--sql-scheduler-incremental` flag is found within an insert script `$1` and `$2` will be replaced with the `start` and `end` of the current interval. By default the interval is set to start at `(today-14 days) 00:00:00` and end at `(today 23:59:59.999)`, you can change the number of days in the rolling interval by setting the `SQL_SCHEDULER_INCREMENTAL_INTERVAL` environment variable. You can also override the start and end with the `--start` and `--end` cli arguments (When overriding a wide variety of date/time formats are allowed. You must include both `start` and `end` when overriding). When `sql-scheduler` detects an incremental table, it will log the interval that it is running the table for.
+
+Incrementally adding to tables presents a problem when the DDL of the table changes, or when the table doesn't exist the first time the script is run.
+
+If the table doesn't exist, `sql-scheduler` will run the DDL script to create the table.
+
+If the tables DDL changes, it is up to you to use the `--refill` flag which will run the DDL script dropping and recreating the table, or manually drop the table yourself.
+
+Here is an example of a simple insert script which uses this functionality:
+```SQL
+--sql-scheduler-incremental
+DELETE FROM prod_schema.table_e WHERE column_e BETWEEN $1 AND $2;
+INSERT INTO prod_schema.table_e (
+    SELECT column_e
+        , column_f
+        , column_g
+    FROM raw_data_schema.table_h
+    WHERE column_e BETWEEN $1 and $2
+);
+```
+
+
 # How to organize/name scripts
 `sql-scheduler` only cares about a few conventions when it comes to organizing and naming scripts:
 1. A suite of scripts consists of two folders: a `ddl` folder, and an `insert` folder. The actual names of these directories and there placement relative to each other is not prescribed.

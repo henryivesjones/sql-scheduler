@@ -4,8 +4,10 @@ import os
 import shutil
 import sys
 import time
-from datetime import timedelta
-from typing import List, Literal, Optional, Set
+from datetime import datetime, timedelta
+from typing import List, Literal, Optional, Set, Tuple
+
+from dateutil import parser as dt_parser
 
 from . import _constants
 from ._helpers import _SIMPLE_OUTPUT, construct_table, w_print
@@ -69,11 +71,46 @@ def _parse_arguments():
         dest="clear_cache",
         help="Clears development cache.",
     )
+    parser.add_argument(
+        "--refill",
+        action="store_true",
+        default=False,
+        dest="refill",
+        help="Force drop and recreate of all incremental tables.",
+    )
+    parser.add_argument(
+        "--start", dest="start", help="Start date/time for incremental table updates."
+    )
+    parser.add_argument(
+        "--end", dest="end", help="End date/time for incremental table updates."
+    )
 
     args = parser.parse_args()
     if args.clear_cache:
         shutil.rmtree(_constants._CACHE_DIR)
         sys.exit()
+
+    start = None
+    if args.start is not None:
+        try:
+            start = dt_parser.parse(args.start)
+        except dt_parser.ParserError:
+            print("Unable to parse --start value.")
+            sys.exit(1)
+
+    end = None
+    if args.end is not None:
+        try:
+            end = dt_parser.parse(args.end)
+        except dt_parser.ParserError:
+            print("Unable to parse --end value.")
+            sys.exit(1)
+
+    if start is None or end is None:
+        incremental_interval = None
+    else:
+        incremental_interval = (start, end)
+
     stage = args.stage
     if args.stage is None and args.dev_schema is not None:
         stage = _constants._STAGE_DEV
@@ -84,6 +121,8 @@ def _parse_arguments():
         args.dependencies,
         args.check,
         args.no_cache,
+        incremental_interval,
+        args.refill,
     )
 
 
@@ -194,6 +233,8 @@ async def execute(
     dependencies: bool = False,
     check: bool = False,
     no_cache: bool = False,
+    incremental_interval: Optional[Tuple[datetime, datetime]] = None,
+    refill: bool = False,
 ) -> List[SQLTask]:
     start_time = time.time()
     # PARSE STAGE (dev, prod)
@@ -252,6 +293,22 @@ async def execute(
         print(f"No dsn provided. {_constants._DSN_ENVVAR} must be set.")
         sys.exit(1)
 
+    if incremental_interval is None:
+        incremental_interval_duration = int(
+            os.environ.get(
+                _constants._INCREMENTAL_INTERVAL_ENVVAR,
+                _constants._BASE_INCREMENTAL_DURATION,
+            )
+        )
+        now = datetime.today()
+        incremental_interval_start = datetime(now.year, now.month, now.day) - timedelta(
+            days=incremental_interval_duration
+        )
+        incremental_interval_end = datetime(now.year, now.month, now.day) + timedelta(
+            days=1, milliseconds=-1
+        )
+        incremental_interval = (incremental_interval_start, incremental_interval_end)
+
     # PARSE TASKS
     tasks = _parse_tasks(
         ddl_directory,
@@ -297,6 +354,12 @@ async def execute(
                 sys.exit(1)
     task_ids = {task.task_id.lower() for task in tasks}
 
+    if any([task.incremental for task in tasks]):
+        start, end = incremental_interval
+        print(
+            f'Incremental tasks will be run with the interval {start.strftime("%Y-%m-%d %H:%M:%S.%f")} -> {end.strftime("%Y-%m-%d %H:%M:%S.%f")}'
+        )
+
     # EXECUTION LOOP
     futures = []
     try:
@@ -306,7 +369,7 @@ async def execute(
                     w_print(f"Scheduling task {task.task_id.lower()} for execution.")
                     futures.append(
                         asyncio.create_task(
-                            task.execute(task_ids),
+                            task.execute(task_ids, incremental_interval, refill=refill),
                             name=task.task_id.lower(),
                         )
                     )
@@ -367,6 +430,8 @@ def sql_scheduler(
     dependencies: bool = False,
     check: bool = False,
     no_cache: bool = False,
+    incremental_interval: Optional[Tuple[datetime, datetime]] = None,
+    refill: bool = False,
 ):
     try:
         tasks = asyncio.run(
@@ -377,6 +442,8 @@ def sql_scheduler(
                 dependencies=dependencies,
                 check=check,
                 no_cache=no_cache,
+                incremental_interval=incremental_interval,
+                refill=refill,
             )
         )
     except:
@@ -457,7 +524,16 @@ def main():
         os.makedirs(_constants._CACHE_DIR, exist_ok=True)
     except:
         print(f"WARNING: Unable to create cache directory {_constants._CACHE_DIR}")
-    stage, dev_schema, targets, dependencies, check, no_cache = _parse_arguments()
+    (
+        stage,
+        dev_schema,
+        targets,
+        dependencies,
+        check,
+        no_cache,
+        incremental_interval,
+        refill,
+    ) = _parse_arguments()
     sql_scheduler(
         stage=stage,
         dev_schema=dev_schema,
@@ -465,6 +541,8 @@ def main():
         dependencies=dependencies,
         check=check,
         no_cache=no_cache,
+        incremental_interval=incremental_interval,
+        refill=refill,
     )
 
 

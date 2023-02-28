@@ -72,13 +72,13 @@ WHERE
 ;
 
 DELETE FROM
-  dev_schema.table_b
+  "dev_schema".table_b
 WHERE
   column_b = 2
 ;
 
 DELETE FROM
-  dev_schema.table_b
+  "dev_schema"."table_b"
 WHERE
   column_b = 2
 ;

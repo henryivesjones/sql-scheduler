@@ -197,7 +197,7 @@ class TestReplaceForDev(unittest.TestCase):
         with open(
             os.path.join(
                 replace_for_dev_solution_path,
-                "public.exhaustive_keywords_table_b_c.sql",
+                "public.exhaustive_keywords_table_b_c_2.sql",
             ),
             "r",
         ) as solution_file:
@@ -221,7 +221,7 @@ class TestReplaceForDev(unittest.TestCase):
         with open(
             os.path.join(
                 replace_for_dev_solution_path,
-                "public.exhaustive_keywords_table_b_c.sql",
+                "public.exhaustive_keywords_table_b_c_2.sql",
             ),
             "r",
         ) as solution_file:

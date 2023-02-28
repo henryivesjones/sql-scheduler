@@ -3,8 +3,10 @@ import hashlib
 import os
 import re
 import time
+from datetime import datetime
 from enum import Enum
-from typing import List, Literal, Set, Union
+from string import Template
+from typing import List, Literal, Set, Tuple, Union
 
 import asyncpg
 
@@ -27,7 +29,8 @@ _COMMENT_REGEXP = re.compile(
 )
 
 _FROM_JOIN_REGEXP = re.compile(
-    r"""(?:from|join)\s+(?P<after>"?[\w\d]*?"?\."?[\w\d]*"?)\s*""", flags=re.IGNORECASE
+    r"""(?<!delete\s)(?:from|join)\s+(?P<after>"?[\w\d]*?"?\."?[\w\d]*"?)\s*""",
+    flags=re.IGNORECASE,
 )
 _INSERT_REGEXP = re.compile(
     r'(?P<before>insert\s*into\s*"?)([\w\d]*)(?P<after>"?\."?[\w\d]*"?)',
@@ -47,7 +50,7 @@ _DROP_TABLE_REGEXP = re.compile(
 )
 
 _DELETE_REGEXP = re.compile(
-    r'(?P<before>delete\sfrom\s*"?)([\w\d]*)(?P<after>"?\."?[\w\d]*"?)',
+    r'(?P<before>delete\s+from\s*"?)([\w\d]*)(?P<after>"?\."?[\w\d]*"?)',
     flags=re.IGNORECASE,
 )
 
@@ -79,6 +82,8 @@ LEFT JOIN "{r_schema}"."{r_table}" AS b on a."{column}" = b."{r_column}"
 WHERE b."{r_column}" IS NULL
 LIMIT 1;
 """.strip()
+
+_INCREMENTAL_REGEXP = re.compile(r"--sql-scheduler-incremental", flags=re.IGNORECASE)
 
 
 class SQLTaskStatus(Enum):
@@ -139,6 +144,7 @@ class SQLTask:
         self.no_cache = no_cache
 
         self.dependencies = self._parse_dependencies()
+        self.incremental = self._is_incremental()
         self.status = SQLTaskStatus.WAITING
         self.failed_tests = []
 
@@ -177,6 +183,10 @@ class SQLTask:
                 )
             ]
         )
+
+    def _is_incremental(self):
+        match = _INCREMENTAL_REGEXP.match(self.get_insert())
+        return match is not None
 
     def remove_second_class_dependencies(
         self, first_class_dependencies: Set[str]
@@ -288,7 +298,12 @@ class SQLTask:
             schema = self.dev_schema
         return f"ANALYZE {schema}.{table};"
 
-    async def execute(self, task_ids: Set[str]):
+    async def execute(
+        self,
+        task_ids: Set[str],
+        incremental_interval: Tuple[datetime, datetime],
+        refill: bool = True,
+    ):
         self.status = SQLTaskStatus.RUNNING
         self.start_timestamp = time.time()
         try:
@@ -304,9 +319,39 @@ class SQLTask:
                     self.status = SQLTaskStatus.SUCCESS
                     return
 
+            if self.incremental and refill is False:
+                pass
             conn = await asyncpg.connect(dsn=self.dsn)
+
+            need_to_create_table = False
+            if self.incremental and refill is False:
+                schema, table = self.task_id.lower().split(".")
+                if self.stage == _constants._STAGE_DEV:
+                    schema = self.dev_schema
+                result = await conn.fetch(
+                    "select 1 from INFORMATION_SCHEMA.tables where table_schema = $1 and table_name = $2 LIMIT 1;",
+                    schema,
+                    table,
+                )
+                if len(result) == 0:
+                    need_to_create_table = True
+                # check if table exists
             async with conn.transaction():
-                await conn.execute(ddl_script)
+                if not self.incremental or refill is True or need_to_create_table:
+                    await conn.execute(ddl_script)
+                if self.incremental:
+                    insert_script = insert_script.replace(
+                        "$1",
+                        "'"
+                        + incremental_interval[0].strftime("%Y-%m-%d %H:%M:%S")
+                        + "'::timestamp",
+                    ).replace(
+                        "$2",
+                        "'"
+                        + incremental_interval[1].strftime("%Y-%m-%d %H:%M:%S")
+                        + "'::timestamp",
+                    )
+
                 await conn.execute(insert_script)
                 await conn.execute(self._get_analyze())
             await conn.close()
