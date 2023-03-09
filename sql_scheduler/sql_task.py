@@ -350,6 +350,18 @@ class SQLTask:
         try:
             ddl_script = self.get_ddl()
             insert_script = self.get_insert()
+            if self.incremental:
+                insert_script = insert_script.replace(
+                    "$1",
+                    "'"
+                    + incremental_interval[0].strftime("%Y-%m-%d %H:%M:%S")
+                    + "'::timestamp",
+                ).replace(
+                    "$2",
+                    "'"
+                    + incremental_interval[1].strftime("%Y-%m-%d %H:%M:%S")
+                    + "'::timestamp",
+                )
             if self.stage == _constants._STAGE_DEV:
                 ddl_script = self._replace_for_dev(ddl_script, task_ids)
                 insert_script = self._replace_for_dev(insert_script, task_ids)
@@ -438,18 +450,6 @@ class SQLTask:
             async with conn.transaction():
                 if not self.incremental or refill is True or need_to_create_table:
                     await conn.execute(ddl_script)
-                if self.incremental:
-                    insert_script = insert_script.replace(
-                        "$1",
-                        "'"
-                        + incremental_interval[0].strftime("%Y-%m-%d %H:%M:%S")
-                        + "'::timestamp",
-                    ).replace(
-                        "$2",
-                        "'"
-                        + incremental_interval[1].strftime("%Y-%m-%d %H:%M:%S")
-                        + "'::timestamp",
-                    )
 
                 await conn.execute(insert_script)
                 await conn.execute(self._get_analyze())
