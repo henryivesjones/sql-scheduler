@@ -74,7 +74,7 @@ FROM {table}
 
 
 def _run_sql_scheduler_command(args: list):
-    result = subprocess.run(args=["sql-scheduler", *args], stdout=subprocess.DEVNULL)
+    result = subprocess.run(args=["sql-scheduler", *args])
 
 
 ALL_TABLES = {"table_a", "table_b", "table_c", "table_d"}

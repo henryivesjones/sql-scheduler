@@ -131,6 +131,22 @@ relationship: column_b = schema.table.column_b
 */
 ```
 
+## upstream_count
+This test will assert that a given table has at least X number of rows. This is useful when verifying that an upstream source not updated by `sql-scheduler` is populated before executing a given script. For example, if we wanted to assert that `raw_data_schema.table_a` has at least 1000 rows before we execute this script:
+```SQL
+/*
+upstream_count: raw_data_schema.table_a 1000
+*/
+```
+
+## upstream_granularity
+This test will assert the granularity of a given table. This is useful when working with upstream tables not populated by sql-scheduler. The same syntax is used as the `granularity` test. For example, if we wanted to assert that the granularity of `raw_data_schema.table_a` is `column_a, column_b` before we execute this script:
+```SQL
+/*
+upstream_granularity: raw_data_schema.table_a column_a, column_b
+*/
+```
+
 # Automatic inter-script dependency management
 Before execution of a run, `sql-scheduler` parses all of the scripts found in the `ddl` and `insert` folders and identifies dependencies between scripts. It is able to do this by identifying tables referenced in `FROM` and `JOIN` statements within the `insert` query. During the execution of a run `sql-scheduler` ensures that any upstream dependencies have completed successfully before executing.
 

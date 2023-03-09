@@ -465,7 +465,12 @@ def sql_scheduler(
     w_print(f"Execution Complete.")
     print(
         construct_table(
-            ["task_id", "script duration (s)", "test duration (s)"],
+            [
+                "task_id",
+                "script duration (s)",
+                "test duration (s)",
+                "upstream test duration (s)",
+            ],
             [
                 (
                     task.task_id.lower(),
@@ -481,6 +486,14 @@ def sql_scheduler(
                         round(
                             task.test_duration
                             if task.test_duration is not None
+                            else -1,
+                            1,
+                        )
+                    ),
+                    str(
+                        round(
+                            task.upstream_test_duration
+                            if task.upstream_test_duration is not None
                             else -1,
                             1,
                         )

@@ -83,6 +83,22 @@ WHERE b."{r_column}" IS NULL
 LIMIT 1;
 """.strip()
 
+_UPSTREAM_COUNT_TEST_REGEXP = re.compile(
+    r"""upstream_count:\s*?"?([\w_\\\/]+?)"?\."?([\w_\\\/]+?)"?\s+?(\d+?)[\s\*]""",
+    flags=re.IGNORECASE,
+)
+
+_COUNT_TEST = """
+SELECT COUNT(1) as count
+FROM "{schema}"."{table}"
+;
+""".strip()
+
+_UPSTREAM_GRANULARITY_TEST_REGEXP = re.compile(
+    r"""upstream_granularity:\s*?"?([\w_\\\/]+?)"?\."?([\w_\\\/]+?)"?\s+([\w_\\\/ ,]+)\*?""",
+    flags=re.IGNORECASE,
+)
+
 _INCREMENTAL_REGEXP = re.compile(r"--sql-scheduler-incremental", flags=re.IGNORECASE)
 
 
@@ -119,6 +135,8 @@ class SQLTask:
     script_duration: Union[float, None] = None
     test_start_timestamp: Union[float, None] = None
     test_duration: Union[float, None] = None
+    upstream_test_start_timestamp: Union[float, None] = None
+    upstream_test_duration: Union[float, None] = None
 
     def __init__(
         self,
@@ -243,6 +261,29 @@ class SQLTask:
         await conn.close()
         return len(results) == 0, f"relationship_({relationship.replace(' ', '')})"
 
+    async def run_count_test(self, schema: str, table: str, count: int):
+        conn = await asyncpg.connect(dsn=self.dsn)
+        test_name = f"count_({schema}.{table}_{count})"
+        results = await conn.fetch(_COUNT_TEST.format(schema=schema, table=table))
+        if len(results) != 1:
+            return False, test_name
+        return results[0]["count"] > count, test_name
+
+    async def run_upstream_granularity_test(
+        self, schema: str, table: str, columns: List[str]
+    ):
+        conn = await asyncpg.connect(dsn=self.dsn)
+        results = await conn.fetch(
+            _GRANULARITY_TEST.format(
+                columns=",".join(columns), schema=schema, table=table
+            )
+        )
+
+        return (
+            len(results) == 0,
+            f'upstream_granularity({schema}.{table} | {",".join(columns)})',
+        )
+
     def _replace_for_dev(self, query: str, task_ids: Set[str]) -> str:
         repl = rf"\g<before>{self.dev_schema}\g<after>"
 
@@ -318,9 +359,67 @@ class SQLTask:
                     w_print(f"Task {self.task_id.lower()} cached.")
                     self.status = SQLTaskStatus.SUCCESS
                     return
+            self.upstream_test_start_timestamp = time.time()
+            upstream_test_futures = []
 
-            if self.incremental and refill is False:
-                pass
+            upstream_count_matches = _UPSTREAM_COUNT_TEST_REGEXP.finditer(insert_script)
+            for upstream_count_match in upstream_count_matches:
+                schema = upstream_count_match.group(1)
+                table = upstream_count_match.group(2)
+                count = upstream_count_match.group(3)
+                try:
+                    count = int(count)
+                except TypeError:
+                    self.failed_tests.append(
+                        f"upstream_count-{schema}-{table}-count-parse_error"
+                    )
+                    continue
+                except ValueError:
+                    self.failed_tests.append(
+                        f"upstream_count-{schema}-{table}-count-parse_error"
+                    )
+                    continue
+                upstream_test_futures.append(
+                    asyncio.create_task(
+                        self.run_count_test(schema, table, count),
+                        name=f"{self.task_id}-upstream-count-test-{schema}-{table}",
+                    )
+                )
+
+            upstream_granularity_matches = _UPSTREAM_GRANULARITY_TEST_REGEXP.finditer(
+                insert_script
+            )
+            for upstream_granularity_match in upstream_granularity_matches:
+                schema = upstream_granularity_match.group(1)
+                table = upstream_granularity_match.group(2)
+                columns = [
+                    col.strip()
+                    for col in upstream_granularity_match.group(3).split(",")
+                ]
+                upstream_test_futures.append(
+                    asyncio.create_task(
+                        self.run_upstream_granularity_test(schema, table, columns),
+                        name=f"{self.task_id}-upstream-granularity-test-{schema}-{table}",
+                    )
+                )
+            if len(upstream_test_futures) > 0:
+                w_print(
+                    f"Running {len(upstream_test_futures)} upstream tests for {self.task_id}."
+                )
+            for test in asyncio.as_completed(upstream_test_futures):
+                result, test_name = await test
+                if not result:
+                    self.failed_tests.append(test_name)
+            self.upstream_test_duration = (
+                time.time() - self.upstream_test_start_timestamp
+            )
+            if len(self.failed_tests) > 0:
+                w_print(
+                    f"Task {self.task_id.lower()} failed {len(self.failed_tests)} upstream tests."
+                )
+                self.status = SQLTaskStatus.TEST_FAILED
+                return
+
             conn = await asyncpg.connect(dsn=self.dsn)
 
             need_to_create_table = False
