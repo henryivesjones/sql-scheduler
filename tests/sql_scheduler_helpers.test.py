@@ -45,6 +45,7 @@ def generate_sql_tasks(
             dsn="",
             cache_duration=600,
             no_cache=False,
+            verbose=False,
         )
         for task_id in task_ids
     }
@@ -150,7 +151,7 @@ class TestParseTasks(unittest.TestCase):
         random_dir = os.path.join(dir_path, uuid4().hex)
         os.makedirs(random_dir)
         tasks = _parse_tasks(
-            random_dir, random_dir, "dev", "dev_schema", "", 600, False
+            random_dir, random_dir, "dev", "dev_schema", "", 600, False, False
         )
         os.removedirs(random_dir)
         self.assertListEqual([], tasks)
@@ -161,7 +162,7 @@ class TestParseTasks(unittest.TestCase):
         with open(os.path.join(random_dir, "test.txt"), "w") as f:
             f.write("test")
         tasks = _parse_tasks(
-            random_dir, random_dir, "dev", "dev_schema", "", 600, False
+            random_dir, random_dir, "dev", "dev_schema", "", 600, False, False
         )
         os.remove(os.path.join(random_dir, "test.txt"))
         os.removedirs(random_dir)
@@ -177,7 +178,7 @@ class TestParseTasks(unittest.TestCase):
         with open(file_2, "w") as f:
             f.write("b")
         tasks = _parse_tasks(
-            random_dir, random_dir, "dev", "dev_schema", "", 600, False
+            random_dir, random_dir, "dev", "dev_schema", "", 600, False, False
         )
 
         self.assertEqual(2, len(tasks))

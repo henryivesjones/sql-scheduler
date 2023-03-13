@@ -33,6 +33,13 @@ def _parse_arguments():
         help="Run SQL tasks in the prod schema. Overrides the SQL_SCHEDULER_STAGE Envvar.",
     )
     parser.add_argument(
+        "--verbose",
+        action="store_true",
+        default=False,
+        dest="verbose",
+        help="Logs all queries run against the database.",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         dest="check",
@@ -123,6 +130,7 @@ def _parse_arguments():
         args.no_cache,
         incremental_interval,
         args.refill,
+        args.verbose,
     )
 
 
@@ -184,6 +192,7 @@ def _parse_tasks(
     dsn: str,
     cache_duration: int,
     no_cache: bool,
+    verbose: bool,
 ) -> List[SQLTask]:
     return [
         SQLTask(
@@ -195,6 +204,7 @@ def _parse_tasks(
             dsn=dsn,
             cache_duration=cache_duration,
             no_cache=no_cache,
+            verbose=verbose,
         )
         for filename in os.listdir(insert_directory)
         if filename[-1 * len(_constants._TASK_FILE_ENDING) :]
@@ -235,6 +245,7 @@ async def execute(
     no_cache: bool = False,
     incremental_interval: Optional[Tuple[datetime, datetime]] = None,
     refill: bool = False,
+    verbose: bool = False,
 ) -> List[SQLTask]:
     start_time = time.time()
     # PARSE STAGE (dev, prod)
@@ -255,6 +266,10 @@ async def execute(
             f"Must be set to a number. Defaulting to {_constants._BASE_CACHE_DURATION}"
         )
         cache_duration = _constants._BASE_CACHE_DURATION
+    if cache_duration <= 0:
+        no_cache = True
+    if not no_cache:
+        os.makedirs(_constants._CACHE_DIR, exist_ok=True)
 
     # PARSE DEV SCHEMA
     if dev_schema is None:
@@ -318,6 +333,7 @@ async def execute(
         dsn=dsn,
         cache_duration=cache_duration,
         no_cache=no_cache,
+        verbose=verbose,
     )
     for task in tasks:
         task.remove_second_class_dependencies({task.task_id.lower() for task in tasks})
@@ -432,6 +448,7 @@ def sql_scheduler(
     no_cache: bool = False,
     incremental_interval: Optional[Tuple[datetime, datetime]] = None,
     refill: bool = False,
+    verbose: bool = False,
 ):
     try:
         tasks = asyncio.run(
@@ -444,6 +461,7 @@ def sql_scheduler(
                 no_cache=no_cache,
                 incremental_interval=incremental_interval,
                 refill=refill,
+                verbose=verbose,
             )
         )
     except:
@@ -537,10 +555,6 @@ def sql_scheduler(
 
 
 def main():
-    try:
-        os.makedirs(_constants._CACHE_DIR, exist_ok=True)
-    except:
-        print(f"WARNING: Unable to create cache directory {_constants._CACHE_DIR}")
     (
         stage,
         dev_schema,
@@ -550,6 +564,7 @@ def main():
         no_cache,
         incremental_interval,
         refill,
+        verbose,
     ) = _parse_arguments()
     sql_scheduler(
         stage=stage,
@@ -560,6 +575,7 @@ def main():
         no_cache=no_cache,
         incremental_interval=incremental_interval,
         refill=refill,
+        verbose=verbose,
     )
 
 
