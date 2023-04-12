@@ -556,7 +556,7 @@ class SQLTask:
                 self.script_duration = time.time() - self.start_timestamp
             self.status = SQLTaskStatus.FAILED
             return
-        if self.stage == _constants._STAGE_DEV and not self.no_cache:
+        if self.stage == _constants._STAGE_DEV and not no_cache:
             self._set_cache(ddl_script, insert_script)
         self.logger.out(f"Task {self.task_id.lower()} complete.")
         self.status = SQLTaskStatus.SUCCESS
