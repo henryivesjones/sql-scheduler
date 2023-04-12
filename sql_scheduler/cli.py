@@ -92,6 +92,9 @@ incremental_interval_end = datetime(now.year, now.month, now.day) + timedelta(
     help="Specific tasks to be run instead of a complete run.",
 )
 @click.option(
+    "-e", "--exclusion", multiple=True, help="Exclude specific tasks from being run."
+)
+@click.option(
     "--dependencies",
     is_flag=True,
     default=False,
@@ -192,6 +195,7 @@ def entrypoint(
     is_prod: Optional[bool],
     dev_schema: str,
     target: Tuple[str],
+    exclusion: Tuple[str],
     dependencies: bool,
     no_cache: bool,
     refill: bool,
@@ -257,12 +261,14 @@ def entrypoint(
         return
 
     targets = None if len(target) == 0 else list(target)
+    exclusions = None if len(exclusion) == 0 else list(exclusion)
     try:
         exit_code = asyncio.run(
             orchestrator.execute(
                 dsn=dsn,
                 incremental_interval=(start, end),
                 targets=targets,
+                exclusions=exclusions,
                 dependencies=dependencies,
                 stage=stage,
                 dev_schema=dev_schema,
