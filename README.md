@@ -43,17 +43,16 @@ pip install sql-scheduler
 ```
 ## Configuration
 
-### Required Environment Variables
+### Environment Variables
  - `SQL_SCHEDULER_DDL_DIRECTORY`: An absolute path to the `ddl` directory. EX: `/home/ubuntu/sql/ddl/`
  - `SQL_SCHEDULER_INSERT_DIRECTORY`: An absolute path to the `insert` directory. EX: `/home/ubuntu/sql/insert/`
  - `SQL_SCHEDULER_DSN`: A DSN for connecting to your database in the form: `postgres://user:password@host:port/database?option=value`
-
-### Optional Environment Variables
  - `SQL_SCHEDULER_STAGE`: The default stage (`prod`, `dev`) to run in. Can be overridden by the CLI flag `--dev` or `--prod`. When running in the dev stage a dev schema must be provided, either thru an Environment Variable, or a cli argument.
  - `SQL_SCHEDULER_DEV_SCHEMA`: The schema to replace with when run in the `dev` stage. Can be overridden by the CLI argument `--dev-schema`.
  - `SQL_SCHEDULER_SIMPLE_OUTPUT`: Simplify the output of this program by removing the status message. (If you are running `sql-scheduler` not in the CLI then you probably want to set this to `1`)
  - `SQL_SCHEDULER_CACHE_DURATION`: The length of time for development cache runs to be valid (specified in seconds). Defaults to 6 hours
  - `SQL_SCHEDULER_INCREMENTAL_INTERVAL`: The number of days for the default incremental window (defaults to 14). Incremental windows starts at `00:00:00` 14 days ago and ends at `23:59:59.999` on the current day. The interval can be overridden by setting the `--start` and `--end` cli values.
+ - `SQL_SCHEDULER_CONCURRENCY`: The maximum number of concurrent tasks to be run
 
 ## Common Commands
 

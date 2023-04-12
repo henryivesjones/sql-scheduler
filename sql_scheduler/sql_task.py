@@ -5,12 +5,13 @@ import re
 import time
 from datetime import datetime
 from enum import Enum
-from typing import List, Literal, Set, Tuple, Union
+from typing import Any, List, Literal, Optional, Set, Tuple, Union
 
 import asyncpg
 
 from . import _constants
-from ._helpers import w_print
+from ._helpers import Logger
+from .exceptions import *
 
 
 class SQLTaskDDLFileNotExists(Exception):
@@ -108,12 +109,15 @@ class SQLTaskStatus(Enum):
     WAITING = 0
     RUNNING = 1
     SUCCESS = 2
+    QUEUED = 3
 
 
 class SQLTask:
     task_id: str
     ddl_directory: str
     insert_directory: str
+    logger: Logger
+    verbose: bool = False
     dependencies: Set[str]
     status: Literal[
         SQLTaskStatus.UPSTREAM_FAILED,
@@ -122,9 +126,10 @@ class SQLTask:
         SQLTaskStatus.TEST_FAILED,
         SQLTaskStatus.RUNNING,
         SQLTaskStatus.SUCCESS,
+        SQLTaskStatus.QUEUED,
     ]
     stage: Literal["dev", "prod"]
-    dev_schema: str
+    dev_schema: Optional[str] = None
     dsn: str
     verbose: bool
     failed_tests: List[str]
@@ -144,11 +149,11 @@ class SQLTask:
         insert_directory: str,
         task_id: str,
         stage: Literal["prod", "dev"],
-        dev_schema: str,
+        dev_schema: Optional[str],
         dsn: str,
         cache_duration: int,
-        no_cache: bool,
-        verbose: bool,
+        logger: Logger,
+        verbose: bool = False,
     ):
         self.task_id = task_id
         self.ddl_directory = ddl_directory
@@ -157,11 +162,11 @@ class SQLTask:
         self.dev_schema = dev_schema
         self.dsn = dsn
         self.cache_duration = cache_duration
+        self.logger = logger
+        self.verbose = verbose
         self.cache_filename = os.path.join(
             _constants._CACHE_DIR, f"{self.task_id.lower()}.txt"
         )
-        self.no_cache = no_cache
-        self.verbose = verbose
 
         self.dependencies = self._parse_dependencies()
         self.incremental = self._is_incremental()
@@ -213,38 +218,52 @@ class SQLTask:
     ) -> None:
         self.dependencies.intersection_update(first_class_dependencies)
 
+    async def _execute_query(
+        self,
+        query: str,
+        params: List[Any] = [],
+        conn: Optional[asyncpg.Connection] = None,
+        fetch: bool = True,
+    ) -> List[asyncpg.Record]:
+        if conn is None:
+            c = await asyncpg.connect(dsn=self.dsn)
+        else:
+            c = conn
+        if self.verbose:
+            self.logger.out(query)
+        if fetch:
+            results = await c.fetch(query, *params)
+        else:
+            results = await c.execute(query, *params)
+        if conn is None:
+            await c.close()
+        return results
+
     async def run_granularity_test(self, columns: List[str]):
-        conn = await asyncpg.connect(dsn=self.dsn)
         schema, table = self.task_id.lower().split(".")
         if self.stage == _constants._STAGE_DEV:
             schema = self.dev_schema
-        query = _GRANULARITY_TEST.format(
-            columns=",".join(columns), schema=schema, table=table
+        results = await self._execute_query(
+            _GRANULARITY_TEST.format(
+                columns=",".join(columns), schema=schema, table=table
+            )
         )
-        if self.verbose:
-            w_print(query)
-        results = await conn.fetch(query)
-        await conn.close()
         return len(results) == 0, f'granularity_({",".join(columns)})'
 
     async def run_not_null_test(self, columns: List[str]):
-        conn = await asyncpg.connect(dsn=self.dsn)
         schema, table = self.task_id.lower().split(".")
         if self.stage == _constants._STAGE_DEV:
             schema = self.dev_schema
-        query = _NOT_NULL_TEST.format(
-            columns="AND ".join([f"{column} IS NULL " for column in columns]),
-            schema=schema,
-            table=table,
+        results = await self._execute_query(
+            _NOT_NULL_TEST.format(
+                columns="AND ".join([f"{column} IS NULL " for column in columns]),
+                schema=schema,
+                table=table,
+            )
         )
-        if self.verbose:
-            w_print(query)
-        results = await conn.fetch(query)
-        await conn.close()
         return len(results) == 0, f'not-null_({",".join(columns)})'
 
     async def run_relationship_test(self, relationship: str, task_ids: Set[str]):
-        conn = await asyncpg.connect(dsn=self.dsn)
         schema, table = self.task_id.lower().split(".")
         if self.stage == _constants._STAGE_DEV:
             schema = self.dev_schema
@@ -255,27 +274,24 @@ class SQLTask:
             and self.stage == _constants._STAGE_DEV
         ):
             r_schema = self.dev_schema
-        query = _RELATIONSHIP_TEST.format(
-            schema=schema,
-            table=table,
-            column=column,
-            r_schema=r_schema,
-            r_table=r_table,
-            r_column=r_column,
+        results = await self._execute_query(
+            _RELATIONSHIP_TEST.format(
+                schema=schema,
+                table=table,
+                column=column,
+                r_schema=r_schema,
+                r_table=r_table,
+                r_column=r_column,
+            )
         )
-        if self.verbose:
-            w_print(query)
-        results = await conn.fetch(query)
-        await conn.close()
         return len(results) == 0, f"relationship_({relationship.replace(' ', '')})"
 
     async def run_count_test(self, schema: str, table: str, count: int):
-        conn = await asyncpg.connect(dsn=self.dsn)
         test_name = f"count_({schema}.{table}_{count})"
-        query = _COUNT_TEST.format(schema=schema, table=table)
-        if self.verbose:
-            w_print(query)
-        results = await conn.fetch(query)
+
+        results = await self._execute_query(
+            _COUNT_TEST.format(schema=schema, table=table)
+        )
         if len(results) != 1:
             return False, test_name
         return results[0]["count"] > count, test_name
@@ -283,13 +299,11 @@ class SQLTask:
     async def run_upstream_granularity_test(
         self, schema: str, table: str, columns: List[str]
     ):
-        conn = await asyncpg.connect(dsn=self.dsn)
-        query = _GRANULARITY_TEST.format(
-            columns=",".join(columns), schema=schema, table=table
+        results = await self._execute_query(
+            _GRANULARITY_TEST.format(
+                columns=",".join(columns), schema=schema, table=table
+            )
         )
-        if self.verbose:
-            w_print(query)
-        results = await conn.fetch(query)
 
         return (
             len(results) == 0,
@@ -300,6 +314,8 @@ class SQLTask:
         repl = rf"\g<before>{self.dev_schema}\g<after>"
 
         def repl_fn(match: re.Match):
+            if self.dev_schema is None:
+                raise SQLSchedulerNoDevSchema()
             schema_table = match.groups()[0].lower().replace('"', "")
             if schema_table in task_ids:
                 # Should do the replacement
@@ -355,7 +371,8 @@ class SQLTask:
         self,
         task_ids: Set[str],
         incremental_interval: Tuple[datetime, datetime],
-        refill: bool = True,
+        refill: bool,
+        no_cache: bool,
     ):
         self.status = SQLTaskStatus.RUNNING
         self.start_timestamp = time.time()
@@ -377,10 +394,8 @@ class SQLTask:
             if self.stage == _constants._STAGE_DEV:
                 ddl_script = self._replace_for_dev(ddl_script, task_ids)
                 insert_script = self._replace_for_dev(insert_script, task_ids)
-                if not self.no_cache and self._check_is_cached(
-                    ddl_script, insert_script
-                ):
-                    w_print(f"Task {self.task_id.lower()} cached.")
+                if not no_cache and self._check_is_cached(ddl_script, insert_script):
+                    self.logger.out(f"Task {self.task_id.lower()} cached.")
                     self.status = SQLTaskStatus.SUCCESS
                     return
             self.upstream_test_start_timestamp = time.time()
@@ -427,7 +442,7 @@ class SQLTask:
                     )
                 )
             if len(upstream_test_futures) > 0:
-                w_print(
+                self.logger.out(
                     f"Running {len(upstream_test_futures)} upstream tests for {self.task_id}."
                 )
             for test in asyncio.as_completed(upstream_test_futures):
@@ -438,7 +453,7 @@ class SQLTask:
                 time.time() - self.upstream_test_start_timestamp
             )
             if len(self.failed_tests) > 0:
-                w_print(
+                self.logger.out(
                     f"Task {self.task_id.lower()} failed {len(self.failed_tests)} upstream tests."
                 )
                 self.status = SQLTaskStatus.TEST_FAILED
@@ -451,29 +466,32 @@ class SQLTask:
                 schema, table = self.task_id.lower().split(".")
                 if self.stage == _constants._STAGE_DEV:
                     schema = self.dev_schema
-                if self.verbose:
-                    w_print(
-                        f"select 1 from INFORMATION_SCHEMA.tables where table_schema = '{schema}' and table_name = '{table}' LIMIT 1;"
-                    )
-                result = await conn.fetch(
+                result = await self._execute_query(
                     "select 1 from INFORMATION_SCHEMA.tables where table_schema = $1 and table_name = $2 LIMIT 1;",
-                    schema,
-                    table,
+                    [schema, table],
+                    conn,
                 )
                 if len(result) == 0:
                     need_to_create_table = True
                 # check if table exists
             async with conn.transaction():
                 if not self.incremental or refill is True or need_to_create_table:
-                    if self.verbose:
-                        w_print(ddl_script)
-                    await conn.execute(ddl_script)
-                if self.verbose:
-                    w_print(insert_script)
-                await conn.execute(insert_script)
-                if self.verbose:
-                    w_print(self._get_analyze())
-                await conn.execute(self._get_analyze())
+                    await self._execute_query(ddl_script, conn=conn, fetch=False)
+                if self.incremental:
+                    insert_script = insert_script.replace(
+                        "$1",
+                        "'"
+                        + incremental_interval[0].strftime("%Y-%m-%d %H:%M:%S")
+                        + "'::timestamp",
+                    ).replace(
+                        "$2",
+                        "'"
+                        + incremental_interval[1].strftime("%Y-%m-%d %H:%M:%S")
+                        + "'::timestamp",
+                    )
+
+                await self._execute_query(insert_script, conn=conn, fetch=False)
+                await self._execute_query(self._get_analyze(), conn=conn, fetch=False)
             await conn.close()
             self.script_duration = time.time() - self.start_timestamp
 
@@ -515,7 +533,7 @@ class SQLTask:
                 )
 
             if len(test_futures) > 0:
-                w_print(
+                self.logger.out(
                     f"Running {len(test_futures)} tests for {self.task_id.lower()}."
                 )
             for test in asyncio.as_completed(test_futures):
@@ -525,20 +543,20 @@ class SQLTask:
             self.test_duration = time.time() - self.test_start_timestamp
 
             if len(self.failed_tests) > 0:
-                w_print(
+                self.logger.out(
                     f"Task {self.task_id.lower()} failed {len(self.failed_tests)} tests."
                 )
                 self.status = SQLTaskStatus.TEST_FAILED
                 return
 
         except Exception as e:
-            w_print(f"Task {self.task_id.lower()} failed:")
-            print(e)
+            self.logger.out(f"Task {self.task_id.lower()} failed:")
+            self.logger.out(f"TASK_EXCEPTION: {e}")
             if self.script_duration is None:
                 self.script_duration = time.time() - self.start_timestamp
             self.status = SQLTaskStatus.FAILED
             return
-        if self.stage == _constants._STAGE_DEV and not self.no_cache:
+        if self.stage == _constants._STAGE_DEV and not no_cache:
             self._set_cache(ddl_script, insert_script)
-        w_print(f"Task {self.task_id.lower()} complete.")
+        self.logger.out(f"Task {self.task_id.lower()} complete.")
         self.status = SQLTaskStatus.SUCCESS
