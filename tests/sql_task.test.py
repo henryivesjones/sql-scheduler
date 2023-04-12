@@ -1,6 +1,7 @@
 import os
 import unittest
 
+from sql_scheduler._helpers import Logger
 from sql_scheduler.sql_task import SQLTask
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -18,7 +19,14 @@ replace_for_dev_solution_path = os.path.join(
 class TestParseDependencies(unittest.TestCase):
     def test_empty_script(self):
         task = SQLTask(
-            ddl_path, insert_path, "public.empty", "prod", "dev_schema", "", 600, False
+            ddl_path,
+            insert_path,
+            "public.empty",
+            "prod",
+            "dev_schema",
+            "",
+            600,
+            Logger(),
         )
         dependencies = task._parse_dependencies()
         self.assertSetEqual(set(), dependencies)
@@ -32,7 +40,7 @@ class TestParseDependencies(unittest.TestCase):
             "dev_schema",
             "",
             600,
-            False,
+            Logger(),
         )
         dependencies = task._parse_dependencies()
         self.assertSetEqual(set(), dependencies)
@@ -46,7 +54,7 @@ class TestParseDependencies(unittest.TestCase):
             "dev_schema",
             "",
             600,
-            False,
+            Logger(),
         )
         dependencies = task._parse_dependencies()
         self.assertSetEqual({"public.table_a"}, dependencies)
@@ -60,7 +68,7 @@ class TestParseDependencies(unittest.TestCase):
             "dev_schema",
             "",
             600,
-            False,
+            Logger(),
         )
         dependencies = task._parse_dependencies()
         self.assertSetEqual({"public.table_a", "public.table_b"}, dependencies)
@@ -74,7 +82,7 @@ class TestParseDependencies(unittest.TestCase):
             "dev_schema",
             "",
             600,
-            False,
+            Logger(),
         )
         dependencies = task._parse_dependencies()
         self.assertSetEqual(
@@ -98,7 +106,7 @@ class TestParseDependencies(unittest.TestCase):
             "dev_schema",
             "",
             600,
-            False,
+            Logger(),
         )
         dependencies = task._parse_dependencies()
         self.assertSetEqual(
@@ -122,7 +130,7 @@ class TestParseDependencies(unittest.TestCase):
             "dev_schema",
             "",
             600,
-            False,
+            Logger(),
         )
         dependencies = task._parse_dependencies()
         self.assertSetEqual(
@@ -148,7 +156,7 @@ class TestReplaceForDev(unittest.TestCase):
             "dev_schema",
             "",
             600,
-            False,
+            Logger(),
         )
         replaced_query = task._replace_for_dev(task.get_insert(), set())
         with open(
@@ -168,7 +176,7 @@ class TestReplaceForDev(unittest.TestCase):
             "dev_schema",
             "",
             600,
-            False,
+            Logger(),
         )
         replaced_query = task._replace_for_dev(task.get_insert(), {"public.table_b"})
         with open(
@@ -188,7 +196,7 @@ class TestReplaceForDev(unittest.TestCase):
             "dev_schema",
             "",
             600,
-            False,
+            Logger(),
         )
         replaced_query = task._replace_for_dev(
             task.get_insert(),
@@ -212,7 +220,7 @@ class TestReplaceForDev(unittest.TestCase):
             "dev_schema",
             "",
             600,
-            False,
+            Logger(),
         )
         replaced_query = task._replace_for_dev(
             task.get_insert(),
@@ -237,7 +245,7 @@ class TestReplaceForDev(unittest.TestCase):
             "dev_schema",
             "",
             600,
-            False,
+            Logger(),
         )
         replaced_query = task._replace_for_dev(
             task.get_insert(),
@@ -262,7 +270,7 @@ class TestReplaceForDev(unittest.TestCase):
             "dev_schema",
             "",
             600,
-            False,
+            Logger(),
         )
         replaced_query = task._replace_for_dev(
             task.get_insert(),
@@ -288,7 +296,7 @@ class TestCleanSQL(unittest.TestCase):
             "dev_schema",
             "",
             600,
-            False,
+            Logger(),
         )
         self.assertEqual(task.get_ddl(), task._clean_sql_script(task.get_ddl()))
         self.assertEqual(task.get_insert(), task._clean_sql_script(task.get_insert()))
@@ -302,7 +310,7 @@ class TestCleanSQL(unittest.TestCase):
             "dev_schema",
             "",
             600,
-            False,
+            Logger(),
         )
         cleaned_insert = (
             "\n"
@@ -325,7 +333,7 @@ insert into public.multiline_comments  (
             "dev_schema",
             "",
             600,
-            False,
+            Logger(),
         )
         cleaned_insert = (
             "\n"

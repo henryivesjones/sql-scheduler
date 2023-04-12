@@ -1,6 +1,8 @@
 import os
 from typing import List, Tuple
 
+import click
+
 from ._constants import _SIMPLE_OUTPUT_ENVVAR
 
 _SIMPLE_OUTPUT = bool(os.environ.get(_SIMPLE_OUTPUT_ENVVAR, False))
@@ -10,6 +12,20 @@ def w_print(content: str, end="\n"):
     if not _SIMPLE_OUTPUT:
         print("\x1b[2K\r", end="")
     print(content, end=end)
+
+
+class Logger:
+    persist_prev: bool
+
+    def __init__(self):
+        self.persist_prev = False
+
+    def out(self, message: str, persist: bool = True):
+        if self.persist_prev:
+            click.echo(message, nl=persist)
+        else:
+            click.echo(f"\x1b[2K\r{message}", nl=persist)
+        self.persist_prev = persist
 
 
 def pad_string(s: str, width: int):
