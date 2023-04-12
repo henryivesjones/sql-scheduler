@@ -55,6 +55,7 @@ class SQLOrchestrator:
         dsn: str,
         incremental_interval: Tuple[datetime, datetime],
         targets: Optional[List[str]] = None,
+        exclusions: Optional[List[str]] = None,
         dependencies: bool = False,
         stage: Literal["prod", "dev"] = _STAGE_PROD,
         dev_schema: Optional[str] = None,
@@ -79,7 +80,7 @@ class SQLOrchestrator:
         if circular:
             raise SQLSchedulerCycleFound()
 
-        self._tasks_subset(targets, dependencies)
+        self._tasks_subset(targets, exclusions, dependencies)
         self.task_ids = {task.task_id.lower() for task in self.tasks}
         if any([task.incremental for task in self.tasks]):
             start, end = incremental_interval
@@ -321,28 +322,39 @@ class SQLOrchestrator:
             parents.update(self._get_task_parents(parent_task[0]))
         return parents
 
-    def _tasks_subset(self, targets: Optional[List[str]], dependencies: bool):
-        if targets is None:
-            return
-
-        if dependencies:
-            self.logger.out(f"Identifying upstream dependencies of {targets}...")
-            subset_tasks: Set[SQLTask] = set()
-            for target in targets:
-                target_task = [_task for _task in self.tasks if _task.task_id == target]
-                if len(target_task) != 1:
-                    raise SQLSchedulerTargetNotFound(target)
-                subset_tasks.update(self._get_task_parents(target_task[0]))
-            self.logger.out(
-                f"Found {len(subset_tasks) - len(targets)} tasks in upstream dependencies."
-            )
-            self.tasks = list(subset_tasks)
-        else:
-            self.tasks = [task for task in self.tasks if task.task_id in targets]
-            if len(self.tasks) != len(targets):
-                raise SQLSchedulerTargetNotFound(
-                    set(targets) - {task.task_id for task in self.tasks}
+    def _tasks_subset(
+        self,
+        targets: Optional[List[str]],
+        exclusions: Optional[List[str]],
+        dependencies: bool,
+    ):
+        if targets is not None:
+            if dependencies:
+                self.logger.out(f"Identifying upstream dependencies of {targets}...")
+                subset_tasks: Set[SQLTask] = set()
+                for target in targets:
+                    target_task = [
+                        _task for _task in self.tasks if _task.task_id == target
+                    ]
+                    if len(target_task) != 1:
+                        raise SQLSchedulerTargetNotFound(target)
+                    subset_tasks.update(self._get_task_parents(target_task[0]))
+                self.logger.out(
+                    f"Found {len(subset_tasks) - len(targets)} tasks in upstream dependencies."
                 )
+                self.tasks = list(subset_tasks)
+            else:
+                self.tasks = [task for task in self.tasks if task.task_id in targets]
+                if len(self.tasks) != len(targets):
+                    raise SQLSchedulerTargetNotFound(
+                        set(targets) - {task.task_id for task in self.tasks}
+                    )
+        if exclusions is None:
+            return
+        exclusions = [exclusion.lower() for exclusion in exclusions]
+        self.tasks = [
+            task for task in self.tasks if task.task_id.lower() not in exclusions
+        ]
 
     def _should_start_task(self, task: SQLTask) -> bool:
         if task.status != SQLTaskStatus.WAITING:

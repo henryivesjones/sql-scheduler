@@ -280,7 +280,7 @@ class TestSQLOrchestrator(unittest.TestCase):
         o = SQLOrchestrator(dummy_dir, dummy_dir, logger)
         o.tasks = tasks
 
-        o._tasks_subset(None, False)
+        o._tasks_subset(None, None, False)
         self.assertEqual(3, len(o.tasks))
 
     def test_tasks_subset_single_target(self):
@@ -290,7 +290,7 @@ class TestSQLOrchestrator(unittest.TestCase):
         o = SQLOrchestrator(dummy_dir, dummy_dir, logger)
         o.tasks = tasks
 
-        o._tasks_subset(["public.a"], False)
+        o._tasks_subset(["public.a"], None, False)
         self.assertEqual(1, len(o.tasks))
         self.assertEqual("public.a", o.tasks[0].task_id)
 
@@ -301,13 +301,13 @@ class TestSQLOrchestrator(unittest.TestCase):
         o = SQLOrchestrator(dummy_dir, dummy_dir, logger)
         o.tasks = tasks
         with nostdout():
-            o._tasks_subset(["public.b"], True)
+            o._tasks_subset(["public.b"], None, True)
         self.assertEqual(2, len(o.tasks))
         self.assertSetEqual(
             {"public.a", "public.b"}, {task.task_id for task in o.tasks}
         )
 
-    def test_tasks_nonexistent_target(self):
+    def test_tasks_subset_nonexistent_target(self):
         d_tasks, tasks, task_ids = generate_sql_tasks(
             ["public.a", "public.b", "public.c"]
         )
@@ -315,9 +315,29 @@ class TestSQLOrchestrator(unittest.TestCase):
         o.tasks = tasks
         with self.assertRaises(SQLSchedulerTargetNotFound):
             with nostdout():
-                o._tasks_subset(["public.d"], True)
+                o._tasks_subset(["public.d"], None, True)
         with self.assertRaises(SQLSchedulerTargetNotFound):
-            o._tasks_subset(["public.d"], False)
+            o._tasks_subset(["public.d"], None, False)
+
+    def test_tasks_subset_exclusions(self):
+        d_tasks, tasks, task_ids = generate_sql_tasks(
+            ["public.a", "public.b", "public.c"]
+        )
+        o = SQLOrchestrator(dummy_dir, dummy_dir, logger)
+        o.tasks = tasks
+        o._tasks_subset(None, ["public.a", "public.b"], True)
+        self.assertEqual(1, len(o.tasks))
+        self.assertSetEqual({"public.c"}, {task.task_id for task in o.tasks})
+
+    def test_tasks_subset_exclusions_target(self):
+        d_tasks, tasks, task_ids = generate_sql_tasks(
+            ["public.a", "public.b", "public.c"]
+        )
+        o = SQLOrchestrator(dummy_dir, dummy_dir, logger)
+        o.tasks = tasks
+        o._tasks_subset(["public.a"], ["public.a"], False)
+        self.assertEqual(0, len(o.tasks))
+        self.assertSetEqual(set(), {task.task_id for task in o.tasks})
 
     def test_get_task_parents_no_dependencies(self):
         d_tasks, tasks, task_ids = generate_sql_tasks(["public.a"])
